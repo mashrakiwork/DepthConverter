@@ -14,7 +14,11 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Syncing environment (first run downloads CUDA PyTorch, ~3 GB)..."
-uv sync
+uv sync --extra da3
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Depth Anything V3 extra failed to install; continuing without it (V2/DPT still work)." -ForegroundColor Yellow
+    uv sync
+}
 
 $ffdir = Join-Path $PSScriptRoot "tools\ffmpeg"
 if (-not (Test-Path (Join-Path $ffdir "ffmpeg.exe"))) {

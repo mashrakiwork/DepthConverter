@@ -13,6 +13,9 @@ dependencies = [
     "imageio-ffmpeg>=0.5",
 ]
 
+[project.optional-dependencies]
+da3 = ["depth-anything-3>=0.1.1"]
+
 [project.scripts]
 depthconverter = "app.main:main"
 
@@ -32,3 +35,4 @@ explicit = true
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
+torchvision = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]

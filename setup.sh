@@ -14,7 +14,10 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 echo "Syncing environment (first run downloads PyTorch, this can take a while)..."
-uv sync
+if ! uv sync --extra da3; then
+    echo "NOTE: Depth Anything V3 extra failed to install; continuing without it (V2/DPT still work)."
+    uv sync
+fi
 
 FFDIR="$(pwd)/tools/ffmpeg"
 if [ ! -x "$FFDIR/ffmpeg" ] && ! command -v ffmpeg >/dev/null 2>&1; then
