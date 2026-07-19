@@ -7,3 +7,16 @@ build/
 dist/
 .idea/
 .vscode/
+
+# AI assistant artifacts - never upload
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.cursor/
+.aider*
+
+# Personal / runtime data - keep private paths out of the repo
+.depthconverter/
+config.json
+*.local
+*.log
