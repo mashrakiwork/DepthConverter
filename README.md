@@ -79,6 +79,11 @@ images** in the headset, the player is interpreting a *full* SBS file as
 (or "3D → Side-by-side → full"). VLC on a monitor always shows the raw
 double-wide frame — that is normal and correct for a full SBS file.
 
+Note: Skybox **remembers the format you chose per file name**. If you
+re-generate a video under a name you used before, it reapplies the old
+(possibly wrong) setting — give new versions a fresh name, or delete the old
+entry from Skybox's library/history first.
+
 ## Performance notes
 
 - Frames stream through ffmpeg pipes — RAM use is constant regardless of video

@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 
 MAX_EYE_SHIFT_PCT = 1.0  # max per-eye shift, % of width (2% total disparity)
+SUPERSAMPLE = 2  # horizontal supersampling factor: anti-aliases warped edges
 
 
 def gaussian_blur_depth(depths: torch.Tensor, ksize: int, sigma: float) -> torch.Tensor:
@@ -157,17 +158,30 @@ def make_sbs(images: torch.Tensor, depths: torch.Tensor, divergence: float = 1.2
     else:
         conv = torch.full((b, 1, 1), float(convergence), device=device)
 
-    # per-eye shift as fraction of width, clamped for comfort, then to pixels
-    eye_shift = (depths - conv) * (divergence / 100.0) / 2.0
-    eye_shift = eye_shift.clamp(-MAX_EYE_SHIFT_PCT / 100.0, MAX_EYE_SHIFT_PCT / 100.0)
-    shift_px = eye_shift * w
+    # Anti-aliasing: warp at SUPERSAMPLE x horizontal resolution, then filter
+    # back down. Forward warping snaps pixels to integer positions; at native
+    # resolution that leaves 1px jaggies along object perimeters.
+    ws = w * SUPERSAMPLE
+    if SUPERSAMPLE > 1:
+        images_hi = F.interpolate(images, size=(h, ws), mode="bicubic",
+                                  align_corners=False).clamp(0, 1)
+        depths_hi = F.interpolate(depths.unsqueeze(1), size=(h, ws),
+                                  mode="bilinear", align_corners=False).squeeze(1)
+    else:
+        images_hi, depths_hi = images, depths
 
-    left = _forward_warp_eye(images, depths, shift_px)    # near moves right
-    right = _forward_warp_eye(images, depths, -shift_px)  # near moves left
+    # per-eye shift as fraction of width, clamped for comfort, then to pixels
+    eye_shift = (depths_hi - conv) * (divergence / 100.0) / 2.0
+    eye_shift = eye_shift.clamp(-MAX_EYE_SHIFT_PCT / 100.0, MAX_EYE_SHIFT_PCT / 100.0)
+    shift_px = eye_shift * ws
+
+    left = _forward_warp_eye(images_hi, depths_hi, shift_px)    # near moves right
+    right = _forward_warp_eye(images_hi, depths_hi, -shift_px)  # near moves left
     sbs = torch.cat([left, right], dim=3)
-    if half:
-        sbs = F.interpolate(sbs, size=(h, w), mode="bilinear", align_corners=False,
-                            antialias=True)
+    out_w = w if half else 2 * w
+    if sbs.shape[-1] != out_w:
+        sbs = F.interpolate(sbs, size=(h, out_w), mode="bilinear",
+                            align_corners=False, antialias=True)
     return sbs
 
 

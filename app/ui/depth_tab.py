@@ -1,8 +1,8 @@
 """Window 1: generate depth maps / depth video from a folder of images or one video."""
 
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QLabel,
-    QVBoxLayout,
+    QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout,
+    QLabel, QMessageBox, QPushButton, QVBoxLayout,
 )
 
 from app.core.models import MODELS
@@ -72,8 +72,18 @@ class DepthTab(JobTab):
                             "your depth output visibly shows the opposite.")
         convention.setWordWrap(True)
 
+        self.delete_model_btn = QPushButton("Delete downloaded model…")
+        self.delete_model_btn.setToolTip(
+            "Removes the selected model's files from your disk to free space. "
+            "The model stays in the list and will simply re-download if you "
+            "use it again.")
+        self.delete_model_btn.clicked.connect(self._delete_model)
+        model_row = QHBoxLayout()
+        model_row.addWidget(self.model_combo, 1)
+        model_row.addWidget(self.delete_model_btn)
+
         mgrid.addWidget(QLabel("Model:"), 0, 0)
-        mgrid.addWidget(self.model_combo, 0, 1)
+        mgrid.addLayout(model_row, 0, 1)
         mgrid.addWidget(QLabel("Device:"), 1, 0)
         mgrid.addWidget(self.device_combo, 1, 1)
         mgrid.addWidget(self.fp16_check, 2, 0, 1, 2)
@@ -108,6 +118,32 @@ class DepthTab(JobTab):
         layout.addWidget(self.encoding)
 
         self._add_run_controls(layout)
+
+    def _delete_model(self):
+        from app.core.models import cached_size_bytes, delete_cached
+
+        model_id = self._model_id()
+        if not model_id:
+            return
+        size = cached_size_bytes(model_id)
+        if size is None:
+            QMessageBox.information(self, "Not downloaded",
+                                    f"'{model_id}' is not on your disk - nothing "
+                                    f"to delete.")
+            return
+        gb = size / (1024 ** 3)
+        answer = QMessageBox.question(
+            self, "Delete model from disk?",
+            f"Delete '{model_id}' ({gb:.2f} GB) from your disk?\n\n"
+            f"It stays in the list and will re-download if you use it again.")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            freed = delete_cached(model_id)
+            self.log_view.appendPlainText(
+                f"Deleted '{model_id}' - freed {freed / (1024 ** 3):.2f} GB.")
+        except Exception as exc:  # noqa: BLE001 - surfaced to the user
+            QMessageBox.warning(self, "Delete failed", str(exc))
 
     def _model_id(self) -> str:
         idx = self.model_combo.currentIndex()

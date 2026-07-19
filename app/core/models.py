@@ -22,6 +22,38 @@ def is_da3(model_id: str) -> bool:
     return "/da3" in model_id.lower()
 
 
+def _find_cached_repo(repo_id: str):
+    from huggingface_hub import scan_cache_dir
+
+    try:
+        info = scan_cache_dir()
+    except Exception:
+        return None
+    for repo in info.repos:
+        if repo.repo_type == "model" and repo.repo_id.lower() == repo_id.lower():
+            return info, repo
+    return None
+
+
+def cached_size_bytes(repo_id: str) -> int | None:
+    """Disk size of a downloaded model, or None if it is not downloaded."""
+    found = _find_cached_repo(repo_id)
+    return found[1].size_on_disk if found else None
+
+
+def delete_cached(repo_id: str) -> int:
+    """Delete a downloaded model from the local cache. Returns bytes freed.
+    The model stays available in the UI and re-downloads on next use."""
+    found = _find_cached_repo(repo_id)
+    if not found:
+        raise ValueError(f"'{repo_id}' is not downloaded.")
+    info, repo = found
+    strategy = info.delete_revisions(*[rev.commit_hash for rev in repo.revisions])
+    freed = strategy.expected_freed_size
+    strategy.execute()
+    return freed
+
+
 def ensure_downloaded(repo_id: str, log=print) -> str:
     """Make sure the model is in the local HF cache; download only if missing."""
     from huggingface_hub import snapshot_download

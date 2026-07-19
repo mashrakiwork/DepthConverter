@@ -24,7 +24,7 @@ from .video_io import VideoReader, VideoWriter, encoder_args, probe_video
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 VID_EXTS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".mts", ".ts"}
 
-SBS_WRITE_BATCH = 4
+SBS_WRITE_BATCH = 2  # supersampled warping doubles per-frame VRAM; keep bounded
 
 
 class JobCancelled(Exception):
@@ -110,6 +110,11 @@ def run_depth_job(opts: dict, progress=lambda p, m: None, log=print, cancel=None
     in_path = Path(opts["input_path"])
     out_dir = Path(opts["output_dir"])
     kind, files = classify_input(in_path)
+    base_name = in_path.stem if in_path.is_file() else (in_path.name or "images")
+    # Multi-file jobs get their own indicative subfolder under the output dir.
+    if kind == "images" and len(files) > 1:
+        out_dir = out_dir / f"{base_name}_depth"
+        log(f"Batch of {len(files)} images -> subfolder {out_dir.name}\\")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     device = resolve_device(opts.get("device", "auto"))
@@ -121,7 +126,6 @@ def run_depth_job(opts: dict, progress=lambda p, m: None, log=print, cancel=None
     if kind == "video":
         _depth_video(files[0], out_dir, est, codec, progress, log, cancel)
     else:
-        base_name = in_path.stem if in_path.is_file() else (in_path.name or "images")
         _depth_images(files, base_name, out_dir, est, codec, opts, progress, log, cancel)
     log(f"Depth job finished. Total time: {_fmt_hms(time.monotonic() - t0)}")
 
@@ -357,6 +361,10 @@ def _sbs_images(orig_dir: Path, dep_dir: Path, out_dir: Path, device, opts,
                    and "_SBS_" not in p.stem)
     if not files:
         raise ValueError("No images found in the original folder.")
+    if len(files) > 1:
+        out_dir = out_dir / f"{orig_dir.name}_3D"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        log(f"Batch of {len(files)} images -> subfolder {out_dir.name}\\")
     half = bool(opts.get("half_sbs"))
     auto_conv = bool(opts.get("auto_convergence", True))
     tag = _sbs_tag(half)
