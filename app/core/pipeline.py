@@ -253,9 +253,11 @@ def run_sbs_job(opts: dict, progress=lambda p, m: None, log=print, cancel=None):
     device = resolve_device(opts.get("device", "auto"))
     auto_conv = bool(opts.get("auto_convergence", True))
     conv_desc = "AUTO (subject-tracked)" if auto_conv else f"{opts['convergence']:g}"
+    aa = int(opts.get("aa_supersample", 2))
     log(f"SBS conversion on {device.upper()}: total disparity {opts['divergence']:g}% "
         f"of width, convergence {conv_desc}, "
-        f"{'half' if opts.get('half_sbs') else 'full'} SBS")
+        f"{'half' if opts.get('half_sbs') else 'full'} SBS, "
+        f"anti-aliasing {'off' if aa <= 1 else f'{aa}x'}")
 
     if orig.is_file() and dep.is_file():
         _sbs_video(orig, dep, out_dir, device, opts, progress, log, cancel)
@@ -278,6 +280,7 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
     invert = bool(opts.get("invert_depth"))
     auto_conv = bool(opts.get("auto_convergence", True))
     smooth = bool(opts.get("smooth_depth", True))
+    supersample = int(opts.get("aa_supersample", 2))
     codec = encoder_args(opts["encoder"], opts["quality"], opts.get("preset", "balanced"))
 
     r_orig = VideoReader(orig, "rgb24")
@@ -301,7 +304,7 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
     deps: list[np.ndarray] = []
 
     def flush():
-        nonlocal done
+        nonlocal done, supersample
         if not imgs:
             return
         img_t = torch.from_numpy(np.stack(imgs)).to(device).permute(0, 3, 1, 2).float().div_(255.0)
@@ -310,11 +313,24 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
             dep_t = 1.0 - dep_t
         if auto_conv:
             convergences = [tracker.update(dep_t[i]) for i in range(dep_t.shape[0])]
-            sbs = make_sbs(img_t, dep_t, opts["divergence"], 0.5, half,
-                           smooth_depth=smooth, convergences=convergences)
-        else:
-            sbs = make_sbs(img_t, dep_t, opts["divergence"], opts["convergence"],
-                           half, smooth_depth=smooth)
+        while True:
+            try:
+                if auto_conv:
+                    sbs = make_sbs(img_t, dep_t, opts["divergence"], 0.5, half,
+                                   smooth_depth=smooth, convergences=convergences,
+                                   supersample=supersample)
+                else:
+                    sbs = make_sbs(img_t, dep_t, opts["divergence"],
+                                   opts["convergence"], half, smooth_depth=smooth,
+                                   supersample=supersample)
+                break
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache()
+                if supersample <= 1:
+                    raise
+                supersample -= 1
+                log(f"Low VRAM: reducing anti-aliasing to "
+                    f"{'off' if supersample <= 1 else f'{supersample}x'}")
         sbs_u8 = (sbs.clamp(0, 1) * 255.0).round().byte().permute(0, 2, 3, 1).cpu().numpy()
         for frame in sbs_u8:
             writer.write(frame)
@@ -381,7 +397,8 @@ def _sbs_images(orig_dir: Path, dep_dir: Path, out_dir: Path, device, opts,
         out = sbs_frame_uint8(rgb, depth, device, opts["divergence"],
                               None if auto_conv else opts["convergence"], half,
                               invert_depth=bool(opts.get("invert_depth")),
-                              smooth_depth=bool(opts.get("smooth_depth", True)))
+                              smooth_depth=bool(opts.get("smooth_depth", True)),
+                              supersample=int(opts.get("aa_supersample", 2)))
         PILImage.fromarray(out).save(out_dir / f"{path.stem}_{tag}.png")
         progress((i + 1) / len(files), f"image {i + 1}/{len(files)}: {path.name}")
     log(f"Wrote {len(files) - skipped} SBS images to {out_dir} "

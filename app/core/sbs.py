@@ -24,7 +24,6 @@ import torch
 import torch.nn.functional as F
 
 MAX_EYE_SHIFT_PCT = 1.0  # max per-eye shift, % of width (2% total disparity)
-SUPERSAMPLE = 2  # horizontal supersampling factor: anti-aliases warped edges
 
 
 def gaussian_blur_depth(depths: torch.Tensor, ksize: int, sigma: float) -> torch.Tensor:
@@ -135,13 +134,16 @@ def _forward_warp_eye(images: torch.Tensor, depths: torch.Tensor,
 def make_sbs(images: torch.Tensor, depths: torch.Tensor, divergence: float = 1.2,
              convergence: float = 0.5, half: bool = False,
              smooth_depth: bool = True,
-             convergences: list[float] | None = None) -> torch.Tensor:
+             convergences: list[float] | None = None,
+             supersample: int = 2) -> torch.Tensor:
     """
     images: (B, 3, H, W) float in [0, 1]
     depths: (B, H, W) float in [0, 1], 1 = near
     divergence: TOTAL disparity budget between eyes, percent of frame width
     convergence: depth that sits on the screen plane (per-batch scalar), or
                  per-frame values via `convergences`
+    supersample: anti-aliasing quality; 1 = off, 2-4 = warp at Nx horizontal
+                 resolution and filter down (higher = smoother edges, more VRAM)
     Returns (B, 3, H, 2W) full SBS, or (B, 3, H, W) squeezed half SBS.
     """
     b, _, h, w = images.shape
@@ -158,11 +160,12 @@ def make_sbs(images: torch.Tensor, depths: torch.Tensor, divergence: float = 1.2
     else:
         conv = torch.full((b, 1, 1), float(convergence), device=device)
 
-    # Anti-aliasing: warp at SUPERSAMPLE x horizontal resolution, then filter
+    # Anti-aliasing: warp at supersample x horizontal resolution, then filter
     # back down. Forward warping snaps pixels to integer positions; at native
     # resolution that leaves 1px jaggies along object perimeters.
-    ws = w * SUPERSAMPLE
-    if SUPERSAMPLE > 1:
+    supersample = max(1, int(supersample))
+    ws = w * supersample
+    if supersample > 1:
         images_hi = F.interpolate(images, size=(h, ws), mode="bicubic",
                                   align_corners=False).clamp(0, 1)
         depths_hi = F.interpolate(depths.unsqueeze(1), size=(h, ws),
@@ -187,7 +190,8 @@ def make_sbs(images: torch.Tensor, depths: torch.Tensor, divergence: float = 1.2
 
 def sbs_frame_uint8(image_u8, depth_arr, device: str, divergence: float,
                     convergence: float | None, half: bool,
-                    invert_depth: bool = False, smooth_depth: bool = True):
+                    invert_depth: bool = False, smooth_depth: bool = True,
+                    supersample: int = 2):
     """numpy uint8 image + uint8/uint16 depth -> uint8 SBS frame.
     convergence=None enables auto-convergence for this image."""
     img = torch.from_numpy(image_u8.copy()).to(device).permute(2, 0, 1).float().div_(255.0).unsqueeze(0)
@@ -197,5 +201,6 @@ def sbs_frame_uint8(image_u8, depth_arr, device: str, divergence: float,
         dep = 1.0 - dep
     if convergence is None:
         convergence = estimate_subject_depth(dep[0])
-    out = make_sbs(img, dep, divergence, convergence, half, smooth_depth=smooth_depth)
+    out = make_sbs(img, dep, divergence, convergence, half, smooth_depth=smooth_depth,
+                   supersample=supersample)
     return (out[0].clamp(0, 1) * 255.0).round().byte().permute(1, 2, 0).cpu().numpy()

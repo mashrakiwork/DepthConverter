@@ -75,6 +75,26 @@ class ConverterTab(JobTab):
         self.convergence.setEnabled(not self.auto_conv_check.isChecked())
         self.auto_conv_check.toggled.connect(
             lambda on: self.convergence.setEnabled(not on))
+        self.aa_check = QCheckBox("Anti-aliasing (smooth object outlines)")
+        self.aa_check.setToolTip(
+            "Renders the stereo warp at a higher internal resolution and "
+            "filters it back down, removing jagged pixel stairs on object "
+            "perimeters. Recommended: ON.")
+        self.aa_check.setChecked(bool(cfg.get("sbs.antialias", True)))
+        self.aa_quality = QComboBox()
+        self.aa_quality.setToolTip(
+            "Anti-aliasing quality: how much higher the internal rendering "
+            "resolution is. Higher = smoother outlines but more VRAM and "
+            "slower. Recommended: 2x; use 3x-4x if you still notice jagged "
+            "edges (needs a strong GPU at 4K).")
+        self.aa_quality.addItem("2x (balanced)", 2)
+        self.aa_quality.addItem("3x (high)", 3)
+        self.aa_quality.addItem("4x (ultra)", 4)
+        idx = self.aa_quality.findData(int(cfg.get("sbs.aa_quality", 2)))
+        self.aa_quality.setCurrentIndex(max(idx, 0))
+        self.aa_quality.setEnabled(self.aa_check.isChecked())
+        self.aa_check.toggled.connect(self.aa_quality.setEnabled)
+
         self.smooth_check = QCheckBox("Smooth depth edges (reduces tearing/shimmer)")
         self.smooth_check.setToolTip(
             "Lightly smooths the depth map before warping, removing blocky "
@@ -105,12 +125,14 @@ class ConverterTab(JobTab):
         sgrid.addWidget(self.auto_conv_check, 1, 0, 1, 2)
         sgrid.addWidget(QLabel("Manual convergence:"), 2, 0)
         sgrid.addWidget(self.convergence, 2, 1)
-        sgrid.addWidget(self.smooth_check, 3, 0, 1, 2)
-        sgrid.addWidget(QLabel("Output layout:"), 4, 0)
-        sgrid.addWidget(self.layout_combo, 4, 1)
-        sgrid.addWidget(QLabel("Device:"), 5, 0)
-        sgrid.addWidget(self.device_combo, 5, 1)
-        sgrid.addWidget(self.invert_check, 6, 0, 1, 2)
+        sgrid.addWidget(self.aa_check, 3, 0)
+        sgrid.addWidget(self.aa_quality, 3, 1)
+        sgrid.addWidget(self.smooth_check, 4, 0, 1, 2)
+        sgrid.addWidget(QLabel("Output layout:"), 5, 0)
+        sgrid.addWidget(self.layout_combo, 5, 1)
+        sgrid.addWidget(QLabel("Device:"), 6, 0)
+        sgrid.addWidget(self.device_combo, 6, 1)
+        sgrid.addWidget(self.invert_check, 7, 0, 1, 2)
         sgrid.setColumnStretch(1, 1)
         layout.addWidget(stereo)
 
@@ -137,6 +159,8 @@ class ConverterTab(JobTab):
         self.cfg.set("sbs.divergence", self.divergence.value())
         self.cfg.set("sbs.convergence", self.convergence.value())
         self.cfg.set("sbs.auto_convergence", self.auto_conv_check.isChecked())
+        self.cfg.set("sbs.antialias", self.aa_check.isChecked())
+        self.cfg.set("sbs.aa_quality", self.aa_quality.currentData())
         self.cfg.set("sbs.smooth_depth", self.smooth_check.isChecked())
         self.cfg.set("sbs.half", self.layout_combo.currentIndex())
         self.cfg.set("sbs.invert_depth", self.invert_check.isChecked())
@@ -148,6 +172,8 @@ class ConverterTab(JobTab):
             "divergence": self.divergence.value(),
             "convergence": self.convergence.value(),
             "auto_convergence": self.auto_conv_check.isChecked(),
+            "aa_supersample": (self.aa_quality.currentData()
+                               if self.aa_check.isChecked() else 1),
             "smooth_depth": self.smooth_check.isChecked(),
             "half_sbs": half,
             "invert_depth": self.invert_check.isChecked(),
