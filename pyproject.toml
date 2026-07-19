@@ -1,0 +1,34 @@
+[project]
+name = "depthconverter"
+version = "0.1.0"
+description = "Local 2D -> 3D (SBS VR) converter: depth estimation + stereo synthesis. Fully offline."
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "PySide6>=6.7",
+    "torch>=2.6",
+    "transformers>=4.48,<5",
+    "huggingface-hub>=0.27",
+    "numpy>=1.26",
+    "pillow>=10.4",
+    "imageio-ffmpeg>=0.5",
+]
+
+[project.scripts]
+depthconverter = "app.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# On Windows, pull CUDA-enabled torch from the PyTorch index (PyPI wheels are CPU-only there).
+# On Linux, PyPI torch already bundles CUDA.
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
