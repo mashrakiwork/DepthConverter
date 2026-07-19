@@ -8,6 +8,8 @@ def main() -> int:
     os.environ.setdefault("DO_NOT_TRACK", "1")
     # Keep the Depth Anything 3 package quiet (per-batch timing spam, gsplat warning).
     os.environ.setdefault("DA3_LOG_LEVEL", "ERROR")
+    # Triton doesn't exist on Windows; stop xformers from probing for it.
+    os.environ.setdefault("XFORMERS_FORCE_DISABLE_TRITON", "1")
 
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication

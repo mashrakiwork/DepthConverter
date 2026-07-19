@@ -36,8 +36,14 @@ class DepthEstimator:
             # Silence the DA3 package's console chatter (per-batch INFO timing
             # lines and the gsplat warning - gsplat is only for 3D Gaussian
             # rendering, which we don't use). Must be set before import.
+            import logging
             import os
             os.environ.setdefault("DA3_LOG_LEVEL", "ERROR")
+            # Triton doesn't exist on Windows; stop xformers/torch from
+            # probing for it and printing a harmless traceback.
+            os.environ.setdefault("XFORMERS_FORCE_DISABLE_TRITON", "1")
+            logging.getLogger("xformers").setLevel(logging.ERROR)
+            logging.getLogger("torch.utils.flop_counter").setLevel(logging.ERROR)
             try:
                 from depth_anything_3.api import DepthAnything3
             except ImportError:
