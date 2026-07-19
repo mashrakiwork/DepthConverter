@@ -6,6 +6,8 @@ def main() -> int:
     # Fully local: no telemetry leaves this machine.
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
     os.environ.setdefault("DO_NOT_TRACK", "1")
+    # Keep the Depth Anything 3 package quiet (per-batch timing spam, gsplat warning).
+    os.environ.setdefault("DA3_LOG_LEVEL", "ERROR")
 
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication

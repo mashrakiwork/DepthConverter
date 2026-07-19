@@ -33,6 +33,11 @@ class DepthEstimator:
         ensure_downloaded(model_id, log=log)
         log(f"Loading model '{model_id}' on {device.upper()}...")
         if self._is_da3:
+            # Silence the DA3 package's console chatter (per-batch INFO timing
+            # lines and the gsplat warning - gsplat is only for 3D Gaussian
+            # rendering, which we don't use). Must be set before import.
+            import os
+            os.environ.setdefault("DA3_LOG_LEVEL", "ERROR")
             try:
                 from depth_anything_3.api import DepthAnything3
             except ImportError:
