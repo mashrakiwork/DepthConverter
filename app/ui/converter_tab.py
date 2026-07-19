@@ -30,21 +30,36 @@ class ConverterTab(JobTab):
         pgrid.setColumnStretch(1, 1)
         layout.addWidget(paths)
 
+        # Old builds used per-eye divergence with default 2.0 (too strong, caused
+        # double vision); migrate that stale default to the new comfortable one.
+        saved_div = float(cfg.get("sbs.divergence", 1.2))
+        if saved_div == 2.0:
+            saved_div = 1.2
+
         stereo = QGroupBox("Stereo settings")
         sgrid = QGridLayout(stereo)
         self.divergence = QDoubleSpinBox()
-        self.divergence.setRange(0.1, 10.0)
+        self.divergence.setRange(0.1, 4.0)
         self.divergence.setSingleStep(0.1)
-        self.divergence.setValue(float(cfg.get("sbs.divergence", 2.0)))
-        self.divergence.setSuffix(" % of width")
-        self.divergence.setToolTip("3D strength. 1.5-3% is comfortable; higher pops "
-                                   "more but strains the eyes.")
+        self.divergence.setValue(saved_div)
+        self.divergence.setSuffix(" % of width (total)")
+        self.divergence.setToolTip("Total disparity budget between the two eyes. "
+                                   "1-1.5% is comfortable in VR; more pops harder "
+                                   "but risks eye strain and double vision.")
+        self.auto_conv_check = QCheckBox("Auto convergence - keep the subject on the "
+                                         "screen plane (recommended)")
+        self.auto_conv_check.setChecked(bool(cfg.get("sbs.auto_convergence", True)))
         self.convergence = QDoubleSpinBox()
         self.convergence.setRange(0.0, 1.0)
         self.convergence.setSingleStep(0.05)
         self.convergence.setValue(float(cfg.get("sbs.convergence", 0.5)))
-        self.convergence.setToolTip("Depth level that sits exactly on the screen plane. "
-                                    "Nearer than this pops out, farther goes in.")
+        self.convergence.setToolTip("Manual: depth level that sits exactly on the "
+                                    "screen plane. Nearer pops out, farther goes in.")
+        self.convergence.setEnabled(not self.auto_conv_check.isChecked())
+        self.auto_conv_check.toggled.connect(
+            lambda on: self.convergence.setEnabled(not on))
+        self.smooth_check = QCheckBox("Smooth depth edges (reduces tearing/shimmer)")
+        self.smooth_check.setChecked(bool(cfg.get("sbs.smooth_depth", True)))
         self.layout_combo = QComboBox()
         self.layout_combo.addItems(["Full SBS (2x width)", "Half SBS (same width)"])
         self.layout_combo.setCurrentIndex(int(cfg.get("sbs.half", 0)))
@@ -54,17 +69,26 @@ class ConverterTab(JobTab):
         self.device_combo.addItems(["Auto", "CUDA", "CPU"])
         self.device_combo.setCurrentText(cfg.get("sbs.device", "Auto"))
 
-        sgrid.addWidget(QLabel("3D strength (divergence):"), 0, 0)
+        sgrid.addWidget(QLabel("3D strength (disparity):"), 0, 0)
         sgrid.addWidget(self.divergence, 0, 1)
-        sgrid.addWidget(QLabel("Convergence:"), 1, 0)
-        sgrid.addWidget(self.convergence, 1, 1)
-        sgrid.addWidget(QLabel("Output layout:"), 2, 0)
-        sgrid.addWidget(self.layout_combo, 2, 1)
-        sgrid.addWidget(QLabel("Device:"), 3, 0)
-        sgrid.addWidget(self.device_combo, 3, 1)
-        sgrid.addWidget(self.invert_check, 4, 0, 1, 2)
+        sgrid.addWidget(self.auto_conv_check, 1, 0, 1, 2)
+        sgrid.addWidget(QLabel("Manual convergence:"), 2, 0)
+        sgrid.addWidget(self.convergence, 2, 1)
+        sgrid.addWidget(self.smooth_check, 3, 0, 1, 2)
+        sgrid.addWidget(QLabel("Output layout:"), 4, 0)
+        sgrid.addWidget(self.layout_combo, 4, 1)
+        sgrid.addWidget(QLabel("Device:"), 5, 0)
+        sgrid.addWidget(self.device_combo, 5, 1)
+        sgrid.addWidget(self.invert_check, 6, 0, 1, 2)
         sgrid.setColumnStretch(1, 1)
         layout.addWidget(stereo)
+
+        note = QLabel("VR playback: outputs are tagged _Full_SBS_LRF / _Half_SBS_LR so "
+                      "players auto-detect the layout. In Skybox, if it still looks "
+                      "squeezed or doubled, manually set the video format to "
+                      "\"Full SBS\" (for 2x-width files).")
+        note.setWordWrap(True)
+        layout.addWidget(note)
 
         self.encoding = EncodingGroup(cfg, "sbs.")
         layout.addWidget(self.encoding)
@@ -81,6 +105,8 @@ class ConverterTab(JobTab):
         half = self.layout_combo.currentIndex() == 1
         self.cfg.set("sbs.divergence", self.divergence.value())
         self.cfg.set("sbs.convergence", self.convergence.value())
+        self.cfg.set("sbs.auto_convergence", self.auto_conv_check.isChecked())
+        self.cfg.set("sbs.smooth_depth", self.smooth_check.isChecked())
         self.cfg.set("sbs.half", self.layout_combo.currentIndex())
         self.cfg.set("sbs.invert_depth", self.invert_check.isChecked())
         self.cfg.set("sbs.device", self.device_combo.currentText())
@@ -90,6 +116,8 @@ class ConverterTab(JobTab):
             "output_dir": self.output_pick.path(),
             "divergence": self.divergence.value(),
             "convergence": self.convergence.value(),
+            "auto_convergence": self.auto_conv_check.isChecked(),
+            "smooth_depth": self.smooth_check.isChecked(),
             "half_sbs": half,
             "invert_depth": self.invert_check.isChecked(),
             "device": self.device_combo.currentText().lower(),

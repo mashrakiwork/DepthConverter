@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.models import MODELS
-from app.ui.common import EncodingGroup, JobTab, PathPicker
+from app.ui.common import MEDIA_FILTER, EncodingGroup, JobTab, PathPicker
 
 
 class DepthTab(JobTab):
@@ -14,13 +14,15 @@ class DepthTab(JobTab):
         super().__init__(cfg)
         layout = QVBoxLayout(self)
 
-        folders = QGroupBox("Folders")
+        folders = QGroupBox("Input / output")
         fgrid = QGridLayout(folders)
-        self.input_pick = PathPicker(cfg, "depth.input_dir", "dir",
-                                     "Folder with images, or with a single video")
+        self.input_pick = PathPicker(cfg, "depth.input_dir", "any",
+                                     "A single video/image file, or a folder of images "
+                                     "(or one with a single video)",
+                                     file_filter=MEDIA_FILTER)
         self.output_pick = PathPicker(cfg, "depth.output_dir", "dir",
                                       "Where depth output is written")
-        fgrid.addWidget(QLabel("Input folder:"), 0, 0)
+        fgrid.addWidget(QLabel("Input (file or folder):"), 0, 0)
         fgrid.addWidget(self.input_pick, 0, 1)
         fgrid.addWidget(QLabel("Output folder:"), 1, 0)
         fgrid.addWidget(self.output_pick, 1, 1)
@@ -51,6 +53,9 @@ class DepthTab(JobTab):
         self.fp16_check.setChecked(bool(cfg.get("depth.fp16", True)))
         self.invert_check = QCheckBox("Invert depth (swap black/white if near/far look flipped)")
         self.invert_check.setChecked(bool(cfg.get("depth.invert", False)))
+        convention = QLabel("Convention: WHITE = near, black = far. Only invert if "
+                            "your depth output visibly shows the opposite.")
+        convention.setWordWrap(True)
 
         mgrid.addWidget(QLabel("Model:"), 0, 0)
         mgrid.addWidget(self.model_combo, 0, 1)
@@ -58,6 +63,7 @@ class DepthTab(JobTab):
         mgrid.addWidget(self.device_combo, 1, 1)
         mgrid.addWidget(self.fp16_check, 2, 0, 1, 2)
         mgrid.addWidget(self.invert_check, 3, 0, 1, 2)
+        mgrid.addWidget(convention, 4, 0, 1, 2)
         mgrid.setColumnStretch(1, 1)
         layout.addWidget(model_box)
 
@@ -91,7 +97,7 @@ class DepthTab(JobTab):
 
     def build_opts(self) -> dict:
         if not self.input_pick.path():
-            raise ValueError("Choose an input folder.")
+            raise ValueError("Choose an input file or folder.")
         if not self.output_pick.path():
             raise ValueError("Choose an output folder.")
         model_id = self._model_id()
@@ -104,7 +110,7 @@ class DepthTab(JobTab):
         self.cfg.set("depth.images_to_video", self.slideshow_check.isChecked())
         self.cfg.set("depth.seconds_per_image", self.spf_spin.value())
         return {
-            "input_dir": self.input_pick.path(),
+            "input_path": self.input_pick.path(),
             "output_dir": self.output_pick.path(),
             "model_id": model_id,
             "device": self.device_combo.currentText().lower(),

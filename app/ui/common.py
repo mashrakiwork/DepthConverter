@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
 from app.core.video_io import available_encoders
 
 VIDEO_FILTER = "Videos (*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.mts *.ts);;All files (*)"
+MEDIA_FILTER = ("Media (*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.mts *.ts "
+                "*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff);;All files (*)")
 
 
 class Worker(QThread):
@@ -48,10 +50,12 @@ class PathPicker(QWidget):
     mode: "dir" for a folder, "any" for file-or-folder.
     """
 
-    def __init__(self, cfg, key: str, mode: str = "dir", placeholder: str = ""):
+    def __init__(self, cfg, key: str, mode: str = "dir", placeholder: str = "",
+                 file_filter: str = VIDEO_FILTER):
         super().__init__()
         self.cfg = cfg
         self.key = key
+        self.file_filter = file_filter
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         self.edit = QLineEdit(cfg.get(key, ""))
@@ -78,7 +82,7 @@ class PathPicker(QWidget):
 
     def _pick_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "Choose file", self.edit.text(),
-                                              VIDEO_FILTER)
+                                              self.file_filter)
         if path:
             self.edit.setText(path)
             self._save()

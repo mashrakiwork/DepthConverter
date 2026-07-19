@@ -47,20 +47,37 @@ The encoder dropdown only ever lists what your ffmpeg actually supports.
 
 ## Usage tips
 
-- **Models**: presets include Depth Anything V2 Small/Base/Large and
-  MiDaS/DPT. The dropdown is editable — paste any HuggingFace
-  depth-estimation repo id (e.g. a Depth Anything V3 transformers port) and it
-  will be downloaded and cached locally on first use.
-- **Invert**: depth output convention is *white = near*. If near/far look
-  swapped (in the depth output, or 3D looks "inside out" in VR), toggle the
-  invert checkbox in the corresponding tab.
-- **3D strength (divergence)**: 1.5–3 % is comfortable; higher pops more but
-  can strain the eyes. **Convergence** sets which depth sits on the screen
-  plane.
-- **VR playback**: play the `*_SBS.mp4` in Skybox / DeoVR / Pigasus etc. and
-  set the layout to *Side-by-Side, full* (or *half* for `_HSBS`).
+- **Models**: presets include Depth Anything **V3** (DA3 Small/Base/Large and
+  Mono-Large — Mono-Large is tuned for monocular depth, ideal for 2D→3D),
+  Depth Anything V2, and MiDaS/DPT. The dropdown is editable — paste any
+  HuggingFace depth-estimation repo id. Models download once and are cached
+  locally.
+- **Depth convention**: *white = near, black = far*. Only use the invert
+  checkbox if your depth output visibly shows the opposite (or 3D looks
+  "inside out" in VR).
+- **Input**: the Depth tab accepts a single video file, a single image file,
+  or a folder of images.
+- **3D strength (disparity)**: this is the *total* disparity budget between
+  the eyes as % of width. 1–1.5 % is comfortable; more pops harder but risks
+  eye strain and double vision. **Auto convergence** (default) tracks the
+  subject depth so the main subject stays on the screen plane — keep it on
+  unless you have a reason not to.
+- Every job logs the completion time per output (HH:MM:SS).
 - All folder/file choices and options are saved automatically
   (`~/.depthconverter/config.json`) and restored on the next launch.
+
+## VR playback (important)
+
+Output files are tagged so players auto-detect the 3D layout:
+
+- Full SBS (2× width): `name_Full_SBS_LRF.mp4`
+- Half SBS (same width): `name_Half_SBS_LR.mp4`
+
+If a video looks **squeezed** (too wide / too short) or you see **double
+images** in the headset, the player is interpreting a *full* SBS file as
+*half* SBS. In Skybox open the format menu and select **Full SBS**
+(or "3D → Side-by-side → full"). VLC on a monitor always shows the raw
+double-wide frame — that is normal and correct for a full SBS file.
 
 ## Performance notes
 
