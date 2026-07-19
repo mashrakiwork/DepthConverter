@@ -19,37 +19,31 @@ Two steps, matching the two tabs in the app:
    as a full-SBS (2× width) or half-SBS video/image. Audio is copied from the
    original. The per-eye aspect ratio is always exactly the source aspect ratio.
 
-## Setup (new PC)
+## Quick start (new PC)
 
-**Windows** (PowerShell):
+**Windows**: double-click **`DepthConverter.bat`**.
+**Linux / macOS**: run **`./depthconverter.sh`**.
+
+On first run the launcher sets up everything automatically:
+[uv](https://docs.astral.sh/uv/), a managed Python 3.12, all dependencies —
+including CUDA-enabled PyTorch — and a **full FFmpeg build (x265 + NVENC)**
+into `tools/ffmpeg`. Later runs start the app instantly, with no console
+window on Windows.
+
+You can also run the setup and app manually:
 
 ```powershell
-.\setup.ps1
-```
-
-**Linux / macOS**:
-
-```bash
-./setup.sh
-```
-
-The script installs [uv](https://docs.astral.sh/uv/), a managed Python 3.12,
-and all dependencies — including CUDA-enabled PyTorch on Windows (on Linux the
-default PyPI wheels already bundle CUDA). Then run:
-
-```
+.\setup.ps1            # or ./setup.sh on Linux/macOS
 uv run depthconverter
 ```
 
 ### ffmpeg
 
-A bundled ffmpeg (via `imageio-ffmpeg`) is used automatically, so nothing else
-is required. If you want **NVENC GPU encoding** (`hevc_nvenc`), install a full
-ffmpeg build and put it on PATH — the app detects available encoders and only
-offers what your ffmpeg supports:
-
-- Windows: `winget install Gyan.FFmpeg`
-- Linux: `sudo apt install ffmpeg`
+Setup installs a full FFmpeg into `tools/ffmpeg` (Windows and Linux x86_64),
+which the app prefers automatically — this enables **NVENC GPU encoding**
+(`hevc_nvenc` / `h264_nvenc`) on NVIDIA cards. If it's missing, the app falls
+back to an ffmpeg on PATH, then to the basic bundled `imageio-ffmpeg` binary.
+The encoder dropdown only ever lists what your ffmpeg actually supports.
 
 ## Usage tips
 

@@ -17,8 +17,15 @@ import numpy as np
 
 _CREATIONFLAGS = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
 
+# Full-featured ffmpeg installed by setup.ps1 / setup.sh (x265 + NVENC).
+_TOOLS_FFMPEG_DIR = Path(__file__).resolve().parents[2] / "tools" / "ffmpeg"
+_EXE_SUFFIX = ".exe" if sys.platform == "win32" else ""
+
 
 def get_ffmpeg_exe() -> str:
+    bundled = _TOOLS_FFMPEG_DIR / f"ffmpeg{_EXE_SUFFIX}"
+    if bundled.exists():
+        return str(bundled)
     exe = shutil.which("ffmpeg")
     if exe:
         return exe
@@ -28,6 +35,9 @@ def get_ffmpeg_exe() -> str:
 
 
 def _get_ffprobe_exe() -> str | None:
+    bundled = _TOOLS_FFMPEG_DIR / f"ffprobe{_EXE_SUFFIX}"
+    if bundled.exists():
+        return str(bundled)
     return shutil.which("ffprobe")
 
 
