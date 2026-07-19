@@ -105,6 +105,11 @@ class EncodingGroup(QGroupBox):
         grid = QGridLayout(self)
 
         self.encoder = QComboBox()
+        self.encoder.setToolTip(
+            "Video codec. H.265/HEVC gives smaller files at the same quality "
+            "(best for VR). NVENC = encoded by the GPU (much faster, minimally "
+            "lower quality per MB); CPU = libx265/libx264 (slower, most "
+            "efficient). Recommended: H.265 NVENC if listed, else H.265 CPU.")
         for key, label in available_encoders():
             self.encoder.addItem(label, key)
         saved = cfg.get(prefix + "encoder")
@@ -122,6 +127,9 @@ class EncodingGroup(QGroupBox):
         self.quality.valueChanged.connect(lambda v: cfg.set(prefix + "quality", v))
 
         self.preset = QComboBox()
+        self.preset.setToolTip(
+            "Encoding speed vs compression trade-off. Slower presets squeeze "
+            "the same quality into smaller files. Recommended: balanced.")
         self.preset.addItems(["quality", "balanced", "fast"])
         self.preset.setCurrentText(cfg.get(prefix + "preset", "balanced"))
         self.preset.currentTextChanged.connect(lambda t: cfg.set(prefix + "preset", t))

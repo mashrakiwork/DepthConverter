@@ -17,10 +17,17 @@ class ConverterTab(JobTab):
         pgrid = QGridLayout(paths)
         self.orig_pick = PathPicker(cfg, "sbs.original", "any",
                                     "Original video file, or folder of images")
+        self.orig_pick.setToolTip("The original 2D content: one video file, or a "
+                                  "folder of images.")
         self.depth_pick = PathPicker(cfg, "sbs.depth", "any",
                                      "Matching depth video file, or folder of depth images")
+        self.depth_pick.setToolTip("The matching depth content made in the Depth tab: "
+                                   "the *_depth video, or the folder with *_depth.png "
+                                   "images.")
         self.output_pick = PathPicker(cfg, "sbs.output_dir", "dir",
                                       "Where the SBS output is written")
+        self.output_pick.setToolTip("Folder where the finished 3D (SBS) files are "
+                                    "written.")
         pgrid.addWidget(QLabel("Original:"), 0, 0)
         pgrid.addWidget(self.orig_pick, 0, 1)
         pgrid.addWidget(QLabel("Depth:"), 1, 0)
@@ -43,33 +50,57 @@ class ConverterTab(JobTab):
         self.divergence.setSingleStep(0.1)
         self.divergence.setValue(saved_div)
         self.divergence.setSuffix(" % of width (total)")
-        self.divergence.setToolTip("Total disparity budget between the two eyes. "
-                                   "1-1.5% is comfortable in VR; more pops harder "
-                                   "but risks eye strain and double vision.")
+        self.divergence.setToolTip(
+            "How strong the 3D effect is - how far apart the left/right eye "
+            "views are pushed (as % of the frame width). More = things pop out "
+            "of the screen harder, but too much strains the eyes and causes "
+            "double vision. Recommended: 1.0-1.5. Start at 1.2 and only raise "
+            "it if the 3D feels flat in your headset.")
         self.auto_conv_check = QCheckBox("Auto convergence - keep the subject on the "
                                          "screen plane (recommended)")
+        self.auto_conv_check.setToolTip(
+            "Automatically tracks the main subject's depth every frame and "
+            "places it exactly on the virtual screen, so your eyes fuse the "
+            "image easily. This is the single biggest comfort factor - keep "
+            "it ON unless you want a fixed artistic depth placement.")
         self.auto_conv_check.setChecked(bool(cfg.get("sbs.auto_convergence", True)))
         self.convergence = QDoubleSpinBox()
         self.convergence.setRange(0.0, 1.0)
         self.convergence.setSingleStep(0.05)
         self.convergence.setValue(float(cfg.get("sbs.convergence", 0.5)))
-        self.convergence.setToolTip("Manual: depth level that sits exactly on the "
-                                    "screen plane. Nearer pops out, farther goes in.")
+        self.convergence.setToolTip(
+            "Only used when auto convergence is off. Which depth (0 = farthest, "
+            "1 = nearest) sits exactly on the screen: nearer content pops out, "
+            "farther content goes behind. Recommended: 0.5.")
         self.convergence.setEnabled(not self.auto_conv_check.isChecked())
         self.auto_conv_check.toggled.connect(
             lambda on: self.convergence.setEnabled(not on))
         self.smooth_check = QCheckBox("Smooth depth edges (reduces tearing/shimmer)")
+        self.smooth_check.setToolTip(
+            "Lightly smooths the depth map before warping, removing blocky "
+            "stair-steps that video compression leaves at object edges. "
+            "Recommended: ON.")
         self.smooth_check.setChecked(bool(cfg.get("sbs.smooth_depth", True)))
         self.layout_combo = QComboBox()
+        self.layout_combo.setToolTip(
+            "Full SBS: output is twice the source width, each eye at full "
+            "resolution - best quality, recommended. Half SBS: same width as "
+            "the source, each eye squeezed to half - smaller file, for players "
+            "or displays that only accept half SBS.")
         self.layout_combo.addItems(["Full SBS (2x width)", "Half SBS (same width)"])
         self.layout_combo.setCurrentIndex(int(cfg.get("sbs.half", 0)))
         self.invert_check = QCheckBox("Depth is inverted (white = far)")
+        self.invert_check.setToolTip(
+            "Only tick this if your depth content has the opposite convention "
+            "(white = far). With depth made by this app, leave it OFF.")
         self.invert_check.setChecked(bool(cfg.get("sbs.invert_depth", False)))
         self.device_combo = QComboBox()
+        self.device_combo.setToolTip("Where the stereo warping runs. Auto picks your "
+                                     "NVIDIA GPU when available - recommended.")
         self.device_combo.addItems(["Auto", "CUDA", "CPU"])
         self.device_combo.setCurrentText(cfg.get("sbs.device", "Auto"))
 
-        sgrid.addWidget(QLabel("3D strength (disparity):"), 0, 0)
+        sgrid.addWidget(QLabel("3D strength (pop-out):"), 0, 0)
         sgrid.addWidget(self.divergence, 0, 1)
         sgrid.addWidget(self.auto_conv_check, 1, 0, 1, 2)
         sgrid.addWidget(QLabel("Manual convergence:"), 2, 0)

@@ -20,8 +20,12 @@ class DepthTab(JobTab):
                                      "A single video/image file, or a folder of images "
                                      "(or one with a single video)",
                                      file_filter=MEDIA_FILTER)
+        self.input_pick.setToolTip("What to compute depth for: pick one video file, "
+                                   "one image file, or a whole folder of images.")
         self.output_pick = PathPicker(cfg, "depth.output_dir", "dir",
                                       "Where depth output is written")
+        self.output_pick.setToolTip("Folder where the depth maps / depth video are "
+                                    "written.")
         fgrid.addWidget(QLabel("Input (file or folder):"), 0, 0)
         fgrid.addWidget(self.input_pick, 0, 1)
         fgrid.addWidget(QLabel("Output folder:"), 1, 0)
@@ -42,16 +46,27 @@ class DepthTab(JobTab):
         elif saved:
             self.model_combo.setEditText(saved)
         self.model_combo.setToolTip(
-            "Pick a preset or type any HuggingFace depth-estimation repo id "
-            "(e.g. a Depth Anything V3 transformers port). Models download once "
-            "and are cached locally.")
+            "Which AI model estimates depth. Bigger = better quality, slower. "
+            "Recommended: Depth Anything V3 Mono Large for best results, or "
+            "V2 Small for quick previews. You can also type any HuggingFace "
+            "depth-estimation repo id. Models download once and are cached "
+            "locally.")
 
         self.device_combo = QComboBox()
+        self.device_combo.setToolTip("Where the model runs. Auto picks your NVIDIA "
+                                     "GPU when available - recommended (CPU is very "
+                                     "slow).")
         self.device_combo.addItems(["Auto", "CUDA", "CPU"])
         self.device_combo.setCurrentText(cfg.get("depth.device", "Auto"))
         self.fp16_check = QCheckBox("FP16 (half precision - faster, less VRAM)")
+        self.fp16_check.setToolTip("Runs the model at 16-bit precision: about twice "
+                                   "as fast and half the VRAM, with no visible "
+                                   "quality loss. Recommended: ON.")
         self.fp16_check.setChecked(bool(cfg.get("depth.fp16", True)))
         self.invert_check = QCheckBox("Invert depth (swap black/white if near/far look flipped)")
+        self.invert_check.setToolTip("Flips the depth output. Normally OFF - only "
+                                     "use if your depth output shows near things "
+                                     "dark instead of bright.")
         self.invert_check.setChecked(bool(cfg.get("depth.invert", False)))
         convention = QLabel("Convention: WHITE = near, black = far. Only invert if "
                             "your depth output visibly shows the opposite.")
@@ -71,8 +86,14 @@ class DepthTab(JobTab):
         igrid = QGridLayout(img_box)
         self.slideshow_check = QCheckBox(
             "Also build a normal video + depth video from the images (slideshow)")
+        self.slideshow_check.setToolTip(
+            "For image-folder input: besides the depth PNGs, also builds a "
+            "slideshow video of the originals plus a matching depth video, so "
+            "you can convert them to a 3D video in the Converter tab.")
         self.slideshow_check.setChecked(bool(cfg.get("depth.images_to_video", False)))
         self.spf_spin = QDoubleSpinBox()
+        self.spf_spin.setToolTip("How long each image stays on screen in the "
+                                 "slideshow video.")
         self.spf_spin.setRange(0.1, 60.0)
         self.spf_spin.setSingleStep(0.5)
         self.spf_spin.setValue(float(cfg.get("depth.seconds_per_image", 2.0)))
