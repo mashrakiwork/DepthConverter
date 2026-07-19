@@ -2,6 +2,7 @@
 # Installs uv (if missing), a managed Python, all dependencies (CUDA torch
 # included), and a full FFmpeg build (x265 + NVENC) into tools\ffmpeg.
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"  # PS5.1: progress rendering slows downloads massively
 
 Write-Host "=== DepthConverter setup ===" -ForegroundColor Cyan
 Set-Location $PSScriptRoot
