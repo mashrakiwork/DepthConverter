@@ -16,6 +16,7 @@ SBS file detected as *half* SBS looks horizontally stretched / vertically
 squeezed in the headset and its doubled disparity causes double vision.
 """
 
+import re
 import time
 from pathlib import Path
 
@@ -44,11 +45,21 @@ def _fmt_hms(seconds: float) -> str:
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
+def _natural_key(path: Path):
+    """Numeric-aware sort key: page2 before page11, and 0/00/01 styles all
+    order by their number - essential for books/manga slideshows where
+    lexicographic order would give 1 -> 11 -> 2."""
+    tokens = [int(t) if t.isdigit() else t.lower()
+              for t in re.split(r"(\d+)", path.name)]
+    return tokens, path.name
+
+
 def scan_input_folder(folder: Path) -> tuple[str, list[Path]]:
     """Classify an input folder as ('video', [file]) or ('images', files)."""
-    videos = sorted(p for p in folder.iterdir() if p.suffix.lower() in VID_EXTS)
-    images = sorted(p for p in folder.iterdir() if p.suffix.lower() in IMG_EXTS
-                    and not p.stem.endswith("_depth"))
+    videos = sorted((p for p in folder.iterdir() if p.suffix.lower() in VID_EXTS),
+                    key=_natural_key)
+    images = sorted((p for p in folder.iterdir() if p.suffix.lower() in IMG_EXTS
+                     and not p.stem.endswith("_depth")), key=_natural_key)
     if videos and images:
         raise ValueError("Input folder contains both videos and images - use one kind "
                          "only, or pick a single file instead.")
@@ -545,9 +556,9 @@ def _sbs_images(orig_dir: Path, dep_dir: Path, out_dir: Path, device, opts,
     from .sbs import sbs_frame_uint8
 
     t0 = time.monotonic()
-    files = sorted(p for p in orig_dir.iterdir() if p.suffix.lower() in IMG_EXTS
-                   and not p.stem.endswith(("_depth", "_SBS", "_HSBS"))
-                   and "_SBS_" not in p.stem)
+    files = sorted((p for p in orig_dir.iterdir() if p.suffix.lower() in IMG_EXTS
+                    and not p.stem.endswith(("_depth", "_SBS", "_HSBS"))
+                    and "_SBS_" not in p.stem), key=_natural_key)
     if not files:
         raise ValueError("No images found in the original folder.")
     if len(files) > 1:

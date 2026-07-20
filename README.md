@@ -33,9 +33,10 @@ stage takes its settings live from its own tab.
 
 ## Quick start (new PC)
 
-**Windows**: double-click **`DepthConverter.bat`**. After the first run a
-**`DepthConverter.lnk`** shortcut (app icon, no console window at all) is
-created next to it — use or pin that one for everyday launching.
+**Windows**: double-click **`DepthConverter.vbs`** — it opens **no console
+window at all** (on the first run it shows one on purpose, so you can watch
+the setup downloads). `DepthConverter.bat` also works, but batch files always
+flash a brief console — a Windows limitation.
 **Linux / macOS**: run **`./depthconverter.sh`**.
 
 On first run the launcher sets up everything automatically:
@@ -71,6 +72,9 @@ The encoder dropdown only ever lists what your ffmpeg actually supports.
   "inside out" in VR).
 - **Input**: the Depth tab accepts a single video file, a single image file,
   or a folder of images.
+- **Image order**: image folders are processed in natural numeric order
+  (`1 → 2 → … → 11`, also `00/01` styles and `page_2` before `page_11`), so
+  book/manga slideshows always come out in reading order.
 - **3D strength (disparity)**: this is the *total* disparity budget between
   the eyes as % of width. 1–1.5 % is comfortable; more pops harder but risks
   eye strain and double vision. **Auto convergence** (default) tracks the
