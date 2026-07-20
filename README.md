@@ -28,7 +28,9 @@ Three tabs — use what you need, in order:
 
 ## Quick start (new PC)
 
-**Windows**: double-click **`DepthConverter.bat`**.
+**Windows**: double-click **`DepthConverter.bat`**. After the first run a
+**`DepthConverter.lnk`** shortcut (app icon, no console window at all) is
+created next to it — use or pin that one for everyday launching.
 **Linux / macOS**: run **`./depthconverter.sh`**.
 
 On first run the launcher sets up everything automatically:

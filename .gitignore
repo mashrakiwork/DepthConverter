@@ -20,3 +20,4 @@ CLAUDE.local.md
 config.json
 *.local
 *.log
+*.lnk

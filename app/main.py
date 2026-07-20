@@ -11,7 +11,15 @@ def main() -> int:
     # Triton doesn't exist on Windows; stop xformers from probing for it.
     os.environ.setdefault("XFORMERS_FORCE_DISABLE_TRITON", "1")
 
+    if sys.platform == "win32":
+        # Give the process its own taskbar identity so Windows shows our icon
+        # (instead of grouping under the generic pythonw.exe one).
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "DepthConverter.DepthConverter")
+
     from PySide6.QtCore import Qt
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
     # Crisp scaling on high-DPI / mixed-DPI monitor setups.
@@ -20,6 +28,9 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("DepthConverter")
     app.setStyle("Fusion")
+    from pathlib import Path
+    app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent
+                                / "assets" / "icon.png")))
 
     from app.ui.main_window import MainWindow
 
