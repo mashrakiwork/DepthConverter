@@ -156,13 +156,8 @@ class ConverterTab(JobTab):
 
         self._add_run_controls(layout)
 
-    def build_opts(self) -> dict:
-        if not self.orig_pick.path():
-            raise ValueError("Choose the original content (video file or image folder).")
-        if not self.depth_pick.path():
-            raise ValueError("Choose the depth content (video file or image folder).")
-        if not self.output_pick.path():
-            raise ValueError("Choose an output folder.")
+    def stage_opts(self) -> dict:
+        """Everything except the content paths (also used by Run all)."""
         half = self.layout_combo.currentIndex() == 1
         self.cfg.set("sbs.divergence", self.divergence.value())
         self.cfg.set("sbs.convergence", self.convergence.value())
@@ -175,9 +170,6 @@ class ConverterTab(JobTab):
         self.cfg.set("sbs.invert_depth", self.invert_check.isChecked())
         self.cfg.set("sbs.device", self.device_combo.currentText())
         return {
-            "original": self.orig_pick.path(),
-            "depth": self.depth_pick.path(),
-            "output_dir": self.output_pick.path(),
             "divergence": self.divergence.value(),
             "convergence": self.convergence.value(),
             "auto_convergence": self.auto_conv_check.isChecked(),
@@ -189,6 +181,20 @@ class ConverterTab(JobTab):
             "invert_depth": self.invert_check.isChecked(),
             "device": self.device_combo.currentText().lower(),
             **self.encoding.opts(),
+        }
+
+    def build_opts(self) -> dict:
+        if not self.orig_pick.path():
+            raise ValueError("Choose the original content (video file or image folder).")
+        if not self.depth_pick.path():
+            raise ValueError("Choose the depth content (video file or image folder).")
+        if not self.output_pick.path():
+            raise ValueError("Choose an output folder.")
+        return {
+            "original": self.orig_pick.path(),
+            "depth": self.depth_pick.path(),
+            "output_dir": self.output_pick.path(),
+            **self.stage_opts(),
         }
 
     def job_fn(self):

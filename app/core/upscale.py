@@ -135,8 +135,9 @@ class Upscaler:
     def upscale(self, rgb: np.ndarray, target_scale: int) -> np.ndarray:
         """uint8 (H, W, 3) -> uint8 (H*target, W*target, 3)."""
         h, w = rgb.shape[:2]
-        x = (torch.from_numpy(rgb).to(self.device).permute(2, 0, 1)
-             .unsqueeze(0).float().div_(255.0))
+        # copy: video frames arrive as read-only buffer views
+        x = (torch.from_numpy(np.ascontiguousarray(rgb)).to(self.device)
+             .permute(2, 0, 1).unsqueeze(0).float().div_(255.0))
         x = self._run(x)
         done = self.scale
         while 1 < done < target_scale:  # chain passes (e.g. 2x model -> 4x target)

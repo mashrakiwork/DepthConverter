@@ -1,8 +1,10 @@
 """Job orchestration for the three windows.
 
-run_upscale_job: input (folder, single video, or single image) -> upscaled output
-run_depth_job:   input (folder, single video, or single image) -> depth output
-run_sbs_job:     original + depth content -> side-by-side 3D output
+run_upscale_job:  input (folder, single video, or single image) -> upscaled output
+run_depth_job:    input (folder, single video, or single image) -> depth output
+run_sbs_job:      original + depth content -> side-by-side 3D output
+run_pipeline_job: chains any selected stages of the above; each stage's output
+                  feeds the next stage's input automatically
 
 All jobs stream frame-by-frame (constant RAM), batch to the GPU, and report
 through progress(fraction, message) / log(message) callbacks. cancel is a
@@ -127,10 +129,11 @@ def run_upscale_job(opts: dict, progress=lambda p, m: None, log=print, cancel=No
     if kind == "video":
         codec = encoder_args(opts["encoder"], opts["quality"],
                              opts.get("preset", "balanced"))
-        _upscale_video(files[0], out_dir, up, scale, codec, progress, log, cancel)
+        result = _upscale_video(files[0], out_dir, up, scale, codec, progress, log, cancel)
     else:
-        _upscale_images(files, out_dir, up, scale, progress, log, cancel)
+        result = _upscale_images(files, out_dir, up, scale, progress, log, cancel)
     log(f"Upscale job finished. Total time: {_fmt_hms(time.monotonic() - t0)}")
+    return result
 
 
 def _upscale_video(src: Path, out_dir: Path, up, scale: int, codec,
@@ -159,6 +162,7 @@ def _upscale_video(src: Path, out_dir: Path, up, scale: int, codec,
         writer.close(abort=True)
         raise
     log(f"Output {out_path.name} completed in {_fmt_hms(time.monotonic() - t0)}")
+    return out_path
 
 
 def _upscale_images(files, out_dir: Path, up, scale: int, progress, log, cancel):
@@ -171,6 +175,7 @@ def _upscale_images(files, out_dir: Path, up, scale: int, progress, log, cancel)
         progress((i + 1) / len(files), f"image {i + 1}/{len(files)}: {path.name}")
     log(f"Wrote {len(files)} upscaled PNGs to {out_dir} "
         f"in {_fmt_hms(time.monotonic() - t0)}")
+    return out_dir if len(files) > 1 else out_dir / f"{files[0].stem}_x{scale}.png"
 
 
 # --------------------------------------------------------------------------
@@ -199,10 +204,15 @@ def run_depth_job(opts: dict, progress=lambda p, m: None, log=print, cancel=None
     codec = encoder_args(opts["encoder"], opts["quality"], opts.get("preset", "balanced"))
 
     if kind == "video":
-        _depth_video(files[0], out_dir, est, codec, progress, log, cancel)
+        result = (files[0], _depth_video(files[0], out_dir, est, codec,
+                                         progress, log, cancel))
     else:
-        _depth_images(files, base_name, out_dir, est, codec, opts, progress, log, cancel)
+        orig, depth = _depth_images(files, base_name, out_dir, est, codec, opts,
+                                    progress, log, cancel)
+        result = (orig if orig is not None else in_path, depth)
     log(f"Depth job finished. Total time: {_fmt_hms(time.monotonic() - t0)}")
+    # (matching original content, depth content) - what the SBS stage needs.
+    return result
 
 
 def _depth_video(src: Path, out_dir: Path, est, codec, progress, log, cancel):
@@ -243,6 +253,7 @@ def _depth_video(src: Path, out_dir: Path, est, codec, progress, log, cancel):
         writer.close(abort=True)
         raise
     log(f"Output {out_path.name} completed in {_fmt_hms(time.monotonic() - t0)}")
+    return out_path
 
 
 def _depth_images(files, base_name: str, out_dir: Path, est, codec, opts,
@@ -269,7 +280,10 @@ def _depth_images(files, base_name: str, out_dir: Path, est, codec, opts,
         f"in {_fmt_hms(time.monotonic() - t0)}")
 
     if not make_video:
-        return
+        # Multi-image: caller substitutes the input folder as the original.
+        if len(files) > 1:
+            return None, out_dir
+        return files[0], out_dir / f"{files[0].stem}_depth.png"
 
     # Build original + depth videos with every image letterboxed (aspect kept)
     # onto a common even-sized canvas.
@@ -308,6 +322,7 @@ def _depth_images(files, base_name: str, out_dir: Path, est, codec, opts,
         raise
     log(f"Outputs {orig_out.name} + {depth_out.name} completed in "
         f"{_fmt_hms(time.monotonic() - t1)}")
+    return orig_out, depth_out
 
 
 # --------------------------------------------------------------------------
@@ -339,12 +354,15 @@ def run_sbs_job(opts: dict, progress=lambda p, m: None, log=print, cancel=None):
         f"anti-aliasing {'off' if aa <= 1 else f'{aa}x'}")
 
     if orig.is_file() and dep.is_file():
-        _sbs_video(orig, dep, out_dir, device, opts, progress, log, cancel)
+        if orig.suffix.lower() in IMG_EXTS:
+            _sbs_image_pair(orig, dep, out_dir, device, opts, progress, log, cancel)
+        else:
+            _sbs_video(orig, dep, out_dir, device, opts, progress, log, cancel)
     elif orig.is_dir() and dep.is_dir():
         _sbs_images(orig, dep, out_dir, device, opts, progress, log, cancel)
     else:
-        raise ValueError("Original and depth must both be video files, or both be "
-                         "image folders.")
+        raise ValueError("Original and depth must both be video files, both be "
+                         "image files, or both be image folders.")
     log(f"SBS job finished. Total time: {_fmt_hms(time.monotonic() - t0)}")
 
 
@@ -436,6 +454,29 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
     log(f"Output {out_path.name} completed in {_fmt_hms(time.monotonic() - t0)}")
 
 
+def _sbs_image_pair(orig: Path, dep: Path, out_dir: Path, device, opts,
+                    progress, log, cancel):
+    """One original image + one depth image -> one SBS image."""
+    from PIL import Image as PILImage
+
+    from .sbs import sbs_frame_uint8
+
+    t0 = time.monotonic()
+    _check(cancel)
+    half = bool(opts.get("half_sbs"))
+    auto_conv = bool(opts.get("auto_convergence", True))
+    out = sbs_frame_uint8(_load_image_rgb(orig), _load_depth_gray(dep), device,
+                          opts["divergence"],
+                          None if auto_conv else opts["convergence"], half,
+                          invert_depth=bool(opts.get("invert_depth")),
+                          smooth_depth=bool(opts.get("smooth_depth", True)),
+                          supersample=int(opts.get("aa_supersample", 2)))
+    out_path = out_dir / f"{orig.stem}_{_sbs_tag(half)}.png"
+    PILImage.fromarray(out).save(out_path)
+    progress(1.0, orig.name)
+    log(f"Output {out_path.name} completed in {_fmt_hms(time.monotonic() - t0)}")
+
+
 def _find_depth_match(orig_stem: str, dep_dir: Path) -> Path | None:
     for suffix in ("_depth", ""):
         for ext in (".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".bmp"):
@@ -484,3 +525,50 @@ def _sbs_images(orig_dir: Path, dep_dir: Path, out_dir: Path, device, opts,
     log(f"Wrote {len(files) - skipped} SBS images to {out_dir} "
         f"in {_fmt_hms(time.monotonic() - t0)}"
         + (f" ({skipped} skipped)" if skipped else ""))
+
+
+# --------------------------------------------------------------------------
+# Run-all pipeline: chain the selected stages
+# --------------------------------------------------------------------------
+
+def run_pipeline_job(opts: dict, progress=lambda p, m: None, log=print, cancel=None):
+    """opts: input_path, output_dir, do_upscale/do_depth/do_sbs flags, and one
+    sub-dict per selected stage ('upscale', 'depth', 'sbs') holding that
+    stage's settings (collected from its tab)."""
+    t0 = time.monotonic()
+    stages = [name for name, key in
+              (("Upscale", "upscale"), ("Depth", "depth"), ("Convert", "sbs"))
+              if opts.get(f"do_{key}")]
+    if not stages:
+        raise ValueError("No stages selected.")
+    n = len(stages)
+    out_dir = str(opts["output_dir"])
+    log(f"Pipeline: {' -> '.join(stages)}")
+
+    def stage_progress(i, name):
+        return lambda p, m: progress((i + p) / n, f"[{i + 1}/{n} {name}] {m}")
+
+    i = 0
+    current = Path(opts["input_path"])  # content flowing through the stages
+    depth_out = None
+    if opts.get("do_upscale"):
+        log(f"=== Stage {i + 1}/{n}: Upscale ===")
+        current = run_upscale_job(
+            {**opts["upscale"], "input_path": str(current), "output_dir": out_dir},
+            stage_progress(i, "Upscale"), log, cancel)
+        i += 1
+    orig_for_sbs = current
+    if opts.get("do_depth"):
+        log(f"=== Stage {i + 1}/{n}: Depth ===")
+        orig_for_sbs, depth_out = run_depth_job(
+            {**opts["depth"], "input_path": str(current), "output_dir": out_dir},
+            stage_progress(i, "Depth"), log, cancel)
+        i += 1
+    if opts.get("do_sbs"):
+        log(f"=== Stage {i + 1}/{n}: Convert (SBS) ===")
+        run_sbs_job(
+            {**opts["sbs"], "original": str(orig_for_sbs),
+             "depth": str(depth_out), "output_dir": out_dir},
+            stage_progress(i, "Convert"), log, cancel)
+    log(f"Pipeline finished ({n} stage(s)). "
+        f"Total time: {_fmt_hms(time.monotonic() - t0)}")

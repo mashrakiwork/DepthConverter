@@ -138,25 +138,31 @@ class UpscaleTab(JobTab):
         except Exception as exc:  # noqa: BLE001 - surfaced to the user
             QMessageBox.warning(self, "Delete failed", str(exc))
 
-    def build_opts(self) -> dict:
-        if not self.input_pick.path():
-            raise ValueError("Choose an input file or folder.")
-        if not self.output_pick.path():
-            raise ValueError("Choose an output folder.")
+    def stage_opts(self) -> dict:
+        """Everything except the input/output paths (also used by Run all)."""
         repo_id, filename = self._model_spec()  # raises ValueError if malformed
         self.cfg.set("upscale.model", [repo_id, filename])
         self.cfg.set("upscale.scale", self.scale_combo.currentData())
         self.cfg.set("upscale.device", self.device_combo.currentText())
         self.cfg.set("upscale.fp16", self.fp16_check.isChecked())
         return {
-            "input_path": self.input_pick.path(),
-            "output_dir": self.output_pick.path(),
             "repo_id": repo_id,
             "filename": filename,
             "scale": self.scale_combo.currentData(),
             "device": self.device_combo.currentText().lower(),
             "fp16": self.fp16_check.isChecked(),
             **self.encoding.opts(),
+        }
+
+    def build_opts(self) -> dict:
+        if not self.input_pick.path():
+            raise ValueError("Choose an input file or folder.")
+        if not self.output_pick.path():
+            raise ValueError("Choose an output folder.")
+        return {
+            "input_path": self.input_pick.path(),
+            "output_dir": self.output_pick.path(),
+            **self.stage_opts(),
         }
 
     def job_fn(self):

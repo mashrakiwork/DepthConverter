@@ -164,11 +164,8 @@ class DepthTab(JobTab):
             return self.model_combo.itemData(idx)
         return text
 
-    def build_opts(self) -> dict:
-        if not self.input_pick.path():
-            raise ValueError("Choose an input file or folder.")
-        if not self.output_pick.path():
-            raise ValueError("Choose an output folder.")
+    def stage_opts(self) -> dict:
+        """Everything except the input/output paths (also used by Run all)."""
         model_id = self._model_id()
         if not model_id:
             raise ValueError("Choose or type a depth model.")
@@ -180,8 +177,6 @@ class DepthTab(JobTab):
         self.cfg.set("depth.seconds_per_image", self.spf_spin.value())
         self.cfg.set("depth.slideshow_fps", self.fps_spin.value())
         return {
-            "input_path": self.input_pick.path(),
-            "output_dir": self.output_pick.path(),
             "model_id": model_id,
             "device": self.device_combo.currentText().lower(),
             "fp16": self.fp16_check.isChecked(),
@@ -190,6 +185,17 @@ class DepthTab(JobTab):
             "seconds_per_image": self.spf_spin.value(),
             "slideshow_fps": self.fps_spin.value(),
             **self.encoding.opts(),
+        }
+
+    def build_opts(self) -> dict:
+        if not self.input_pick.path():
+            raise ValueError("Choose an input file or folder.")
+        if not self.output_pick.path():
+            raise ValueError("Choose an output folder.")
+        return {
+            "input_path": self.input_pick.path(),
+            "output_dir": self.output_pick.path(),
+            **self.stage_opts(),
         }
 
     def job_fn(self):

@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QLabel, QMainWindow, QTabWidget
 from app.config import Config
 from app.ui.converter_tab import ConverterTab
 from app.ui.depth_tab import DepthTab
+from app.ui.pipeline_tab import PipelineTab
 from app.ui.upscale_tab import UpscaleTab
 
 
@@ -27,9 +28,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("DepthConverter - local 2D to 3D VR")
         cfg = Config()
         tabs = QTabWidget()
-        tabs.addTab(UpscaleTab(cfg), "1 · Upscale")
-        tabs.addTab(DepthTab(cfg), "2 · Depth")
-        tabs.addTab(ConverterTab(cfg), "3 · Converter (SBS)")
+        upscale = UpscaleTab(cfg)
+        depth = DepthTab(cfg)
+        converter = ConverterTab(cfg)
+        tabs.addTab(upscale, "1 · Upscale")
+        tabs.addTab(depth, "2 · Depth")
+        tabs.addTab(converter, "3 · Converter (SBS)")
+        tabs.addTab(PipelineTab(cfg, upscale, depth, converter), "▶ Run all")
         self.setCentralWidget(tabs)
         self.resize(860, 820)
 

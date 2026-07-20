@@ -26,6 +26,11 @@ Three tabs — use what you need, in order:
    original (optional). The per-eye aspect ratio is always exactly the source
    aspect ratio.
 
+**▶ Run all** — one Start button for the whole chain. Tick the stages you want
+(e.g. untick Upscale if your content is already high-res), pick one input and
+one output folder, and each stage's output feeds the next automatically. Every
+stage takes its settings live from its own tab.
+
 ## Quick start (new PC)
 
 **Windows**: double-click **`DepthConverter.bat`**. After the first run a
@@ -115,6 +120,6 @@ app/
     video_io.py      streaming ffmpeg reader/writer, encoder detection
     sbs.py           GPU stereo warping (DIBR)
     upscale.py       AI upscaling (spandrel models, tiled VRAM-safe inference)
-    pipeline.py      the three jobs (upscale, depth generation, SBS conversion)
-  ui/                PySide6 tabs (Upscale, Depth, Converter)
+    pipeline.py      the jobs (upscale, depth, SBS) + the run-all chain
+  ui/                PySide6 tabs (Upscale, Depth, Converter, Run all)
 ```
