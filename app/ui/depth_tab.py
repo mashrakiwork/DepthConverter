@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QMessageBox, QPushButton, QVBoxLayout,
+    QLabel, QMessageBox, QPushButton, QSpinBox, QVBoxLayout,
 )
 
 from app.core.models import MODELS
@@ -108,9 +108,21 @@ class DepthTab(JobTab):
         self.spf_spin.setSingleStep(0.5)
         self.spf_spin.setValue(float(cfg.get("depth.seconds_per_image", 2.0)))
         self.spf_spin.setSuffix(" s per image")
+        self.fps_spin = QSpinBox()
+        self.fps_spin.setToolTip(
+            "Frame rate of the slideshow videos. Slideshow frames are static "
+            "duplicates, so a low fps (e.g. 10) keeps the frame count small "
+            "and makes the later SBS conversion much faster - the image "
+            "timing stays exactly the same. Use 24-30 only if you plan to "
+            "add motion effects elsewhere.")
+        self.fps_spin.setRange(1, 60)
+        self.fps_spin.setValue(int(cfg.get("depth.slideshow_fps", 10)))
+        self.fps_spin.setSuffix(" fps")
         igrid.addWidget(self.slideshow_check, 0, 0, 1, 2)
         igrid.addWidget(QLabel("Image duration:"), 1, 0)
         igrid.addWidget(self.spf_spin, 1, 1)
+        igrid.addWidget(QLabel("Video frame rate:"), 2, 0)
+        igrid.addWidget(self.fps_spin, 2, 1)
         igrid.setColumnStretch(1, 1)
         layout.addWidget(img_box)
 
@@ -166,6 +178,7 @@ class DepthTab(JobTab):
         self.cfg.set("depth.invert", self.invert_check.isChecked())
         self.cfg.set("depth.images_to_video", self.slideshow_check.isChecked())
         self.cfg.set("depth.seconds_per_image", self.spf_spin.value())
+        self.cfg.set("depth.slideshow_fps", self.fps_spin.value())
         return {
             "input_path": self.input_pick.path(),
             "output_dir": self.output_pick.path(),
@@ -175,6 +188,7 @@ class DepthTab(JobTab):
             "invert": self.invert_check.isChecked(),
             "images_to_video": self.slideshow_check.isChecked(),
             "seconds_per_image": self.spf_spin.value(),
+            "slideshow_fps": self.fps_spin.value(),
             **self.encoding.opts(),
         }
 

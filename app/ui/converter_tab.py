@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from app.ui.common import EncodingGroup, JobTab, PathPicker
+from app.ui.common import MEDIA_FILTER, EncodingGroup, JobTab, PathPicker
 
 
 class ConverterTab(JobTab):
@@ -16,11 +16,13 @@ class ConverterTab(JobTab):
         paths = QGroupBox("Content")
         pgrid = QGridLayout(paths)
         self.orig_pick = PathPicker(cfg, "sbs.original", "any",
-                                    "Original video file, or folder of images")
+                                    "Original video file, or folder of images",
+                                    file_filter=MEDIA_FILTER)
         self.orig_pick.setToolTip("The original 2D content: one video file, or a "
                                   "folder of images.")
         self.depth_pick = PathPicker(cfg, "sbs.depth", "any",
-                                     "Matching depth video file, or folder of depth images")
+                                     "Matching depth video file, or folder of depth images",
+                                     file_filter=MEDIA_FILTER)
         self.depth_pick.setToolTip("The matching depth content made in the Depth tab: "
                                    "the *_depth video, or the folder with *_depth.png "
                                    "images.")
@@ -109,6 +111,11 @@ class ConverterTab(JobTab):
             "or displays that only accept half SBS.")
         self.layout_combo.addItems(["Full SBS (2x width)", "Half SBS (same width)"])
         self.layout_combo.setCurrentIndex(int(cfg.get("sbs.half", 0)))
+        self.audio_check = QCheckBox("Keep audio from the original video")
+        self.audio_check.setToolTip(
+            "Copies the original video's audio track into the 3D output "
+            "unchanged. Untick to produce a silent video.")
+        self.audio_check.setChecked(bool(cfg.get("sbs.keep_audio", True)))
         self.invert_check = QCheckBox("Depth is inverted (white = far)")
         self.invert_check.setToolTip(
             "Only tick this if your depth content has the opposite convention "
@@ -132,7 +139,8 @@ class ConverterTab(JobTab):
         sgrid.addWidget(self.layout_combo, 5, 1)
         sgrid.addWidget(QLabel("Device:"), 6, 0)
         sgrid.addWidget(self.device_combo, 6, 1)
-        sgrid.addWidget(self.invert_check, 7, 0, 1, 2)
+        sgrid.addWidget(self.audio_check, 7, 0, 1, 2)
+        sgrid.addWidget(self.invert_check, 8, 0, 1, 2)
         sgrid.setColumnStretch(1, 1)
         layout.addWidget(stereo)
 
@@ -163,6 +171,7 @@ class ConverterTab(JobTab):
         self.cfg.set("sbs.aa_quality", self.aa_quality.currentData())
         self.cfg.set("sbs.smooth_depth", self.smooth_check.isChecked())
         self.cfg.set("sbs.half", self.layout_combo.currentIndex())
+        self.cfg.set("sbs.keep_audio", self.audio_check.isChecked())
         self.cfg.set("sbs.invert_depth", self.invert_check.isChecked())
         self.cfg.set("sbs.device", self.device_combo.currentText())
         return {
@@ -175,6 +184,7 @@ class ConverterTab(JobTab):
             "aa_supersample": (self.aa_quality.currentData()
                                if self.aa_check.isChecked() else 1),
             "smooth_depth": self.smooth_check.isChecked(),
+            "keep_audio": self.audio_check.isChecked(),
             "half_sbs": half,
             "invert_depth": self.invert_check.isChecked(),
             "device": self.device_combo.currentText().lower(),

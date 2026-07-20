@@ -206,10 +206,14 @@ def _depth_images(files, base_name: str, out_dir: Path, est, codec, opts,
     tw += tw % 2
     th += th % 2
     in_rate = f"{1.0 / spf:.6f}"
-    out_fps = "30"
+    # Modest CFR output: slideshow frames are static duplicates, so a high fps
+    # only bloats the frame count and slows the later SBS conversion. Clamped
+    # so every image still gets at least one frame.
+    fps = int(opts.get("slideshow_fps", 10))
+    out_fps = str(max(fps, int(np.ceil(1.0 / spf))))
     orig_out = out_dir / f"{base_name}.mp4"
     depth_out = out_dir / f"{base_name}_depth.mp4"
-    log(f"Building videos at {spf:g}s per image, canvas {tw}x{th}: "
+    log(f"Building videos at {spf:g}s per image ({out_fps} fps), canvas {tw}x{th}: "
         f"{orig_out.name} + {depth_out.name}")
 
     w1 = VideoWriter(orig_out, tw, th, in_rate, codec, pix_fmt_in="rgb24", out_rate=out_fps)
@@ -290,12 +294,13 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
         log(f"WARNING: frame counts differ (original ~{info.n_frames}, "
             f"depth ~{r_dep.info.n_frames}); output stops at the shorter one.")
 
+    keep_audio = bool(opts.get("keep_audio", True)) and info.has_audio
     out_w = info.width if half else info.width * 2
     out_path = out_dir / f"{orig.stem}_{_sbs_tag(half)}.mp4"
     log(f"{info.width}x{info.height} -> {out_w}x{info.height} -> {out_path.name}"
-        + (" [audio copied]" if info.has_audio else ""))
+        + (" [audio copied]" if keep_audio else ""))
     writer = VideoWriter(out_path, out_w, info.height, info.fps_str, codec,
-                         pix_fmt_in="rgb24", audio_from=orig)
+                         pix_fmt_in="rgb24", audio_from=orig if keep_audio else None)
 
     tracker = ConvergenceTracker()
     total = max(info.n_frames, 1)
