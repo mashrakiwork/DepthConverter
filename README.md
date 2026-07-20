@@ -7,17 +7,24 @@ HuggingFace (telemetry is disabled).
 
 ## How it works
 
-Two steps, matching the two tabs in the app:
+Three tabs — use what you need, in order:
 
-1. **Depth** — pick an input folder (images, or a single video). A monocular
+1. **Upscale** *(optional)* — AI-upscale images or a video 2x/3x/4x with
+   Real-ESRGAN-family models (UltraSharp, AnimeSharp, or any HuggingFace-hosted
+   `.pth` typed as `repo_id :: filename.pth`). Frames are processed in
+   overlapping GPU tiles, so even 4K input fits in limited VRAM; the tile size
+   halves itself on out-of-memory. Upscaling *before* depth + SBS gives the
+   best 3D quality.
+2. **Depth** — pick an input folder (images, or a single video). A monocular
    depth model (Depth Anything V2 etc.) runs on your GPU and produces a depth
    map per frame: a grayscale video for video input, 16-bit depth PNGs for
    images (optionally also a slideshow video + depth video at *N* seconds per
-   image).
-2. **Converter (SBS)** — pick the original content + its depth content. Each
+   image and a chosen frame rate).
+3. **Converter (SBS)** — pick the original content + its depth content. Each
    frame is warped per-pixel on the GPU into a left/right eye pair and encoded
    as a full-SBS (2× width) or half-SBS video/image. Audio is copied from the
-   original. The per-eye aspect ratio is always exactly the source aspect ratio.
+   original (optional). The per-eye aspect ratio is always exactly the source
+   aspect ratio.
 
 ## Quick start (new PC)
 
@@ -105,6 +112,7 @@ app/
     depth_engine.py  batched FP16 inference, OOM backoff, normalization
     video_io.py      streaming ffmpeg reader/writer, encoder detection
     sbs.py           GPU stereo warping (DIBR)
-    pipeline.py      the two jobs (depth generation, SBS conversion)
-  ui/                PySide6 tabs (Depth, Converter)
+    upscale.py       AI upscaling (spandrel models, tiled VRAM-safe inference)
+    pipeline.py      the three jobs (upscale, depth generation, SBS conversion)
+  ui/                PySide6 tabs (Upscale, Depth, Converter)
 ```

@@ -448,6 +448,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pillow" },
     { name = "pyside6" },
+    { name = "spandrel" },
     { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
     { name = "torch", version = "2.13.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "sys_platform == 'win32'" },
     { name = "transformers" },
@@ -466,6 +467,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "pillow", specifier = ">=10.4" },
     { name = "pyside6", specifier = ">=6.7" },
+    { name = "spandrel", specifier = ">=0.4" },
     { name = "torch", marker = "sys_platform != 'win32'", specifier = ">=2.6" },
     { name = "torch", marker = "sys_platform == 'win32'", specifier = ">=2.6", index = "https://download.pytorch.org/whl/cu126" },
     { name = "transformers", specifier = ">=4.48,<5" },
@@ -2238,6 +2240,24 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
+name = "spandrel"
+version = "0.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "safetensors" },
+    { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'win32'" },
+    { name = "torch", version = "2.13.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "sys_platform == 'win32'" },
+    { name = "torchvision" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/8f/ab4565c23dd67a036ab72101a830cebd7ca026b2fddf5771bbf6284f6228/spandrel-0.4.2.tar.gz", hash = "sha256:fefa4ea966c6a5b7721dcf24f3e2062a5a96a395c8bedcb570fb55971fdcbccb", size = 247544, upload-time = "2026-02-21T01:52:26.342Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/31/411ea965835534c43d4b98d451968354876e0e867ea1fd42669e4cca0732/spandrel-0.4.2-py3-none-any.whl", hash = "sha256:6c93e3ecbeb0e548fd2df45a605472b34c1614287c56b51bb33cdef7ae5235b5", size = 320811, upload-time = "2026-02-21T01:52:25.015Z" },
 ]
 
 [[package]]

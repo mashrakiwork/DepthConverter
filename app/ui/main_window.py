@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QLabel, QMainWindow, QTabWidget
 from app.config import Config
 from app.ui.converter_tab import ConverterTab
 from app.ui.depth_tab import DepthTab
+from app.ui.upscale_tab import UpscaleTab
 
 
 class _DeviceProbe(QThread):
@@ -26,8 +27,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("DepthConverter - local 2D to 3D VR")
         cfg = Config()
         tabs = QTabWidget()
-        tabs.addTab(DepthTab(cfg), "1 · Depth")
-        tabs.addTab(ConverterTab(cfg), "2 · Converter (SBS)")
+        tabs.addTab(UpscaleTab(cfg), "1 · Upscale")
+        tabs.addTab(DepthTab(cfg), "2 · Depth")
+        tabs.addTab(ConverterTab(cfg), "3 · Converter (SBS)")
         self.setCentralWidget(tabs)
         self.resize(860, 820)
 

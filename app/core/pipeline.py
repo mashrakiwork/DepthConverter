@@ -1,7 +1,8 @@
-"""Job orchestration for the two windows.
+"""Job orchestration for the three windows.
 
-run_depth_job:  input (folder, single video, or single image) -> depth output
-run_sbs_job:    original + depth content -> side-by-side 3D output
+run_upscale_job: input (folder, single video, or single image) -> upscaled output
+run_depth_job:   input (folder, single video, or single image) -> depth output
+run_sbs_job:     original + depth content -> side-by-side 3D output
 
 All jobs stream frame-by-frame (constant RAM), batch to the GPU, and report
 through progress(fraction, message) / log(message) callbacks. cancel is a
@@ -96,6 +97,80 @@ def _letterbox(arr: np.ndarray, tw: int, th: int, resample=Image.LANCZOS) -> np.
     canvas = Image.new(img.mode, (tw, th), 0)
     canvas.paste(resized, ((tw - nw) // 2, (th - nh) // 2))
     return np.asarray(canvas)
+
+
+# --------------------------------------------------------------------------
+# Upscale job
+# --------------------------------------------------------------------------
+
+def run_upscale_job(opts: dict, progress=lambda p, m: None, log=print, cancel=None):
+    from .hardware import resolve_device
+    from .upscale import Upscaler
+
+    t0 = time.monotonic()
+    in_path = Path(opts["input_path"])
+    out_dir = Path(opts["output_dir"])
+    scale = int(opts["scale"])
+    kind, files = classify_input(in_path)
+    base_name = in_path.stem if in_path.is_file() else (in_path.name or "images")
+    if kind == "images" and len(files) > 1:
+        out_dir = out_dir / f"{base_name}_x{scale}"
+        log(f"Batch of {len(files)} images -> subfolder {out_dir.name}\\")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    device = resolve_device(opts.get("device", "auto"))
+    log(f"Input: {kind} ({len(files)} file(s)). Device: {device.upper()}. "
+        f"Target scale: {scale}x.")
+    up = Upscaler(opts["repo_id"], opts["filename"], device=device,
+                  fp16=opts.get("fp16", True), log=log)
+
+    if kind == "video":
+        codec = encoder_args(opts["encoder"], opts["quality"],
+                             opts.get("preset", "balanced"))
+        _upscale_video(files[0], out_dir, up, scale, codec, progress, log, cancel)
+    else:
+        _upscale_images(files, out_dir, up, scale, progress, log, cancel)
+    log(f"Upscale job finished. Total time: {_fmt_hms(time.monotonic() - t0)}")
+
+
+def _upscale_video(src: Path, out_dir: Path, up, scale: int, codec,
+                   progress, log, cancel):
+    t0 = time.monotonic()
+    info = probe_video(src)
+    out_w, out_h = info.width * scale, info.height * scale
+    out_path = out_dir / f"{src.stem}_x{scale}.mp4"
+    log(f"Video: {info.width}x{info.height} @ {info.fps:.3f} fps -> "
+        f"{out_w}x{out_h} -> {out_path.name}"
+        + (" [audio copied]" if info.has_audio else ""))
+    reader = VideoReader(src, "rgb24")
+    writer = VideoWriter(out_path, out_w, out_h, info.fps_str, codec,
+                         pix_fmt_in="rgb24", audio_from=src)
+    total = max(info.n_frames, 1)
+    done = 0
+    try:
+        for frame in reader.frames():
+            _check(cancel)
+            writer.write(up.upscale(frame, scale))
+            done += 1
+            progress(min(done / total, 1.0), f"frame {done}/{info.n_frames or '?'}")
+        writer.close()
+    except BaseException:
+        reader.close()
+        writer.close(abort=True)
+        raise
+    log(f"Output {out_path.name} completed in {_fmt_hms(time.monotonic() - t0)}")
+
+
+def _upscale_images(files, out_dir: Path, up, scale: int, progress, log, cancel):
+    t0 = time.monotonic()
+    for i, path in enumerate(files):
+        _check(cancel)
+        rgb = _load_image_rgb(path)
+        out = up.upscale(rgb, scale)
+        Image.fromarray(out).save(out_dir / f"{path.stem}_x{scale}.png")
+        progress((i + 1) / len(files), f"image {i + 1}/{len(files)}: {path.name}")
+    log(f"Wrote {len(files)} upscaled PNGs to {out_dir} "
+        f"in {_fmt_hms(time.monotonic() - t0)}")
 
 
 # --------------------------------------------------------------------------
