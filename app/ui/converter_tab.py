@@ -97,6 +97,13 @@ class ConverterTab(JobTab):
         self.aa_quality.setEnabled(self.aa_check.isChecked())
         self.aa_check.toggled.connect(self.aa_quality.setEnabled)
 
+        self.deborder_check = QCheckBox("Remove black borders (crop letterbox bars)")
+        self.deborder_check.setToolTip(
+            "Detects constant black bars around the original (letterbox / "
+            "pillarbox), and crops them - and the matching depth area - away "
+            "before the 3D warp, so the bars don't eat VR resolution. Does "
+            "nothing if there are none. Recommended: ON.")
+        self.deborder_check.setChecked(bool(cfg.get("sbs.remove_borders", True)))
         self.smooth_check = QCheckBox("Smooth depth edges (reduces tearing/shimmer)")
         self.smooth_check.setToolTip(
             "Lightly smooths the depth map before warping, removing blocky "
@@ -135,12 +142,13 @@ class ConverterTab(JobTab):
         sgrid.addWidget(self.aa_check, 3, 0)
         sgrid.addWidget(self.aa_quality, 3, 1)
         sgrid.addWidget(self.smooth_check, 4, 0, 1, 2)
-        sgrid.addWidget(QLabel("Output layout:"), 5, 0)
-        sgrid.addWidget(self.layout_combo, 5, 1)
-        sgrid.addWidget(QLabel("Device:"), 6, 0)
-        sgrid.addWidget(self.device_combo, 6, 1)
-        sgrid.addWidget(self.audio_check, 7, 0, 1, 2)
-        sgrid.addWidget(self.invert_check, 8, 0, 1, 2)
+        sgrid.addWidget(self.deborder_check, 5, 0, 1, 2)
+        sgrid.addWidget(QLabel("Output layout:"), 6, 0)
+        sgrid.addWidget(self.layout_combo, 6, 1)
+        sgrid.addWidget(QLabel("Device:"), 7, 0)
+        sgrid.addWidget(self.device_combo, 7, 1)
+        sgrid.addWidget(self.audio_check, 8, 0, 1, 2)
+        sgrid.addWidget(self.invert_check, 9, 0, 1, 2)
         sgrid.setColumnStretch(1, 1)
         layout.addWidget(stereo)
 
@@ -165,6 +173,7 @@ class ConverterTab(JobTab):
         self.cfg.set("sbs.antialias", self.aa_check.isChecked())
         self.cfg.set("sbs.aa_quality", self.aa_quality.currentData())
         self.cfg.set("sbs.smooth_depth", self.smooth_check.isChecked())
+        self.cfg.set("sbs.remove_borders", self.deborder_check.isChecked())
         self.cfg.set("sbs.half", self.layout_combo.currentIndex())
         self.cfg.set("sbs.keep_audio", self.audio_check.isChecked())
         self.cfg.set("sbs.invert_depth", self.invert_check.isChecked())
@@ -176,6 +185,7 @@ class ConverterTab(JobTab):
             "aa_supersample": (self.aa_quality.currentData()
                                if self.aa_check.isChecked() else 1),
             "smooth_depth": self.smooth_check.isChecked(),
+            "remove_borders": self.deborder_check.isChecked(),
             "keep_audio": self.audio_check.isChecked(),
             "half_sbs": half,
             "invert_depth": self.invert_check.isChecked(),

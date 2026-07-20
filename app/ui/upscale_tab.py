@@ -71,6 +71,13 @@ class UpscaleTab(JobTab):
                                    "as fast and half the VRAM, with no visible "
                                    "quality loss. Recommended: ON.")
         self.fp16_check.setChecked(bool(cfg.get("upscale.fp16", True)))
+        self.deborder_check = QCheckBox("Remove black borders (crop letterbox bars)")
+        self.deborder_check.setToolTip(
+            "Detects constant black bars around the content (letterbox / "
+            "pillarbox) and crops them away before upscaling, so no GPU time "
+            "is wasted on empty bars. Does nothing if there are none. "
+            "Recommended: ON.")
+        self.deborder_check.setChecked(bool(cfg.get("upscale.remove_borders", True)))
 
         self.delete_model_btn = QPushButton("Delete downloaded model…")
         self.delete_model_btn.setToolTip(
@@ -89,6 +96,7 @@ class UpscaleTab(JobTab):
         mgrid.addWidget(QLabel("Device:"), 2, 0)
         mgrid.addWidget(self.device_combo, 2, 1)
         mgrid.addWidget(self.fp16_check, 3, 0, 1, 2)
+        mgrid.addWidget(self.deborder_check, 4, 0, 1, 2)
         mgrid.setColumnStretch(1, 1)
         layout.addWidget(model_box)
 
@@ -145,12 +153,14 @@ class UpscaleTab(JobTab):
         self.cfg.set("upscale.scale", self.scale_combo.currentData())
         self.cfg.set("upscale.device", self.device_combo.currentText())
         self.cfg.set("upscale.fp16", self.fp16_check.isChecked())
+        self.cfg.set("upscale.remove_borders", self.deborder_check.isChecked())
         return {
             "repo_id": repo_id,
             "filename": filename,
             "scale": self.scale_combo.currentData(),
             "device": self.device_combo.currentText().lower(),
             "fp16": self.fp16_check.isChecked(),
+            "remove_borders": self.deborder_check.isChecked(),
             **self.encoding.opts(),
         }
 

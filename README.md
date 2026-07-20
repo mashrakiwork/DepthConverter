@@ -76,6 +76,11 @@ The encoder dropdown only ever lists what your ffmpeg actually supports.
   eye strain and double vision. **Auto convergence** (default) tracks the
   subject depth so the main subject stays on the screen plane — keep it on
   unless you have a reason not to.
+- **Black borders**: the Upscale and Converter tabs remove constant black bars
+  (letterbox/pillarbox) by default, so bars are never upscaled and never eat
+  VR resolution. Videos are sampled across their whole duration, so dark
+  scenes or fade-ins don't cause overcropping. Untick the checkbox to keep
+  the bars.
 - Every job logs the completion time per output (HH:MM:SS).
 - All folder/file choices and options are saved automatically
   (`~/.depthconverter/config.json`) and restored on the next launch.

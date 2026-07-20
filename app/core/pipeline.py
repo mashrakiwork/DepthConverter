@@ -126,21 +126,31 @@ def run_upscale_job(opts: dict, progress=lambda p, m: None, log=print, cancel=No
     up = Upscaler(opts["repo_id"], opts["filename"], device=device,
                   fp16=opts.get("fp16", True), log=log)
 
+    deborder = bool(opts.get("remove_borders", True))
     if kind == "video":
         codec = encoder_args(opts["encoder"], opts["quality"],
                              opts.get("preset", "balanced"))
-        result = _upscale_video(files[0], out_dir, up, scale, codec, progress, log, cancel)
+        result = _upscale_video(files[0], out_dir, up, scale, codec, deborder,
+                                progress, log, cancel)
     else:
-        result = _upscale_images(files, out_dir, up, scale, progress, log, cancel)
+        result = _upscale_images(files, out_dir, up, scale, deborder,
+                                 progress, log, cancel)
     log(f"Upscale job finished. Total time: {_fmt_hms(time.monotonic() - t0)}")
     return result
 
 
-def _upscale_video(src: Path, out_dir: Path, up, scale: int, codec,
+def _upscale_video(src: Path, out_dir: Path, up, scale: int, codec, deborder,
                    progress, log, cancel):
+    from .borders import crop, video_borders
+
     t0 = time.monotonic()
     info = probe_video(src)
-    out_w, out_h = info.width * scale, info.height * scale
+    box = video_borders(src) if deborder else None
+    cw, ch = ((box[2] - box[0], box[3] - box[1]) if box
+              else (info.width, info.height))
+    if box:
+        log(f"Black borders removed: {info.width}x{info.height} -> {cw}x{ch}")
+    out_w, out_h = cw * scale, ch * scale
     out_path = out_dir / f"{src.stem}_x{scale}.mp4"
     log(f"Video: {info.width}x{info.height} @ {info.fps:.3f} fps -> "
         f"{out_w}x{out_h} -> {out_path.name}"
@@ -153,6 +163,8 @@ def _upscale_video(src: Path, out_dir: Path, up, scale: int, codec,
     try:
         for frame in reader.frames():
             _check(cancel)
+            if box:
+                frame = crop(frame, box)
             writer.write(up.upscale(frame, scale))
             done += 1
             progress(min(done / total, 1.0), f"frame {done}/{info.n_frames or '?'}")
@@ -165,11 +177,21 @@ def _upscale_video(src: Path, out_dir: Path, up, scale: int, codec,
     return out_path
 
 
-def _upscale_images(files, out_dir: Path, up, scale: int, progress, log, cancel):
+def _upscale_images(files, out_dir: Path, up, scale: int, deborder,
+                    progress, log, cancel):
+    from .borders import crop, image_borders
+
     t0 = time.monotonic()
     for i, path in enumerate(files):
         _check(cancel)
         rgb = _load_image_rgb(path)
+        if deborder:
+            box = image_borders(rgb)
+            if box:
+                log(f"{path.name}: black borders removed "
+                    f"({rgb.shape[1]}x{rgb.shape[0]} -> "
+                    f"{box[2] - box[0]}x{box[3] - box[1]})")
+                rgb = crop(rgb, box)
         out = up.upscale(rgb, scale)
         Image.fromarray(out).save(out_dir / f"{path.stem}_x{scale}.png")
         progress((i + 1) / len(files), f"image {i + 1}/{len(files)}: {path.name}")
@@ -370,6 +392,7 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
                progress, log, cancel):
     import torch
 
+    from .borders import crop, scale_box, video_borders
     from .sbs import ConvergenceTracker, make_sbs
 
     t0 = time.monotonic()
@@ -387,12 +410,21 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
         log(f"WARNING: frame counts differ (original ~{info.n_frames}, "
             f"depth ~{r_dep.info.n_frames}); output stops at the shorter one.")
 
+    box = video_borders(orig) if opts.get("remove_borders", True) else None
+    dep_box = None
+    cw, ch = info.width, info.height
+    if box:
+        cw, ch = box[2] - box[0], box[3] - box[1]
+        dep_box = scale_box(box, info.width, info.height,
+                            r_dep.info.width, r_dep.info.height)
+        log(f"Black borders removed: {info.width}x{info.height} -> {cw}x{ch}")
+
     keep_audio = bool(opts.get("keep_audio", True)) and info.has_audio
-    out_w = info.width if half else info.width * 2
+    out_w = cw if half else cw * 2
     out_path = out_dir / f"{orig.stem}_{_sbs_tag(half)}.mp4"
-    log(f"{info.width}x{info.height} -> {out_w}x{info.height} -> {out_path.name}"
+    log(f"{info.width}x{info.height} -> {out_w}x{ch} -> {out_path.name}"
         + (" [audio copied]" if keep_audio else ""))
-    writer = VideoWriter(out_path, out_w, info.height, info.fps_str, codec,
+    writer = VideoWriter(out_path, out_w, ch, info.fps_str, codec,
                          pix_fmt_in="rgb24", audio_from=orig if keep_audio else None)
 
     tracker = ConvergenceTracker()
@@ -440,6 +472,9 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
     try:
         for frame, dframe in zip(r_orig.frames(), r_dep.frames()):
             _check(cancel)
+            if box:
+                frame = crop(frame, box)
+                dframe = crop(dframe, dep_box)
             imgs.append(frame)
             deps.append(dframe)
             if len(imgs) >= SBS_WRITE_BATCH:
@@ -454,6 +489,20 @@ def _sbs_video(orig: Path, dep: Path, out_dir: Path, device, opts,
     log(f"Output {out_path.name} completed in {_fmt_hms(time.monotonic() - t0)}")
 
 
+def _deborder_pair(rgb, depth, log, name: str):
+    """Crop the same black borders (if any) off an image + its depth map."""
+    from .borders import crop, image_borders, scale_box
+
+    box = image_borders(rgb)
+    if box is None:
+        return rgb, depth
+    log(f"{name}: black borders removed ({rgb.shape[1]}x{rgb.shape[0]} -> "
+        f"{box[2] - box[0]}x{box[3] - box[1]})")
+    dep_box = scale_box(box, rgb.shape[1], rgb.shape[0],
+                        depth.shape[1], depth.shape[0])
+    return crop(rgb, box), crop(depth, dep_box)
+
+
 def _sbs_image_pair(orig: Path, dep: Path, out_dir: Path, device, opts,
                     progress, log, cancel):
     """One original image + one depth image -> one SBS image."""
@@ -465,7 +514,10 @@ def _sbs_image_pair(orig: Path, dep: Path, out_dir: Path, device, opts,
     _check(cancel)
     half = bool(opts.get("half_sbs"))
     auto_conv = bool(opts.get("auto_convergence", True))
-    out = sbs_frame_uint8(_load_image_rgb(orig), _load_depth_gray(dep), device,
+    rgb, depth = _load_image_rgb(orig), _load_depth_gray(dep)
+    if opts.get("remove_borders", True):
+        rgb, depth = _deborder_pair(rgb, depth, log, orig.name)
+    out = sbs_frame_uint8(rgb, depth, device,
                           opts["divergence"],
                           None if auto_conv else opts["convergence"], half,
                           invert_depth=bool(opts.get("invert_depth")),
@@ -515,6 +567,8 @@ def _sbs_images(orig_dir: Path, dep_dir: Path, out_dir: Path, device, opts,
             continue
         rgb = _load_image_rgb(path)
         depth = _load_depth_gray(dpath)
+        if opts.get("remove_borders", True):
+            rgb, depth = _deborder_pair(rgb, depth, log, path.name)
         out = sbs_frame_uint8(rgb, depth, device, opts["divergence"],
                               None if auto_conv else opts["convergence"], half,
                               invert_depth=bool(opts.get("invert_depth")),
