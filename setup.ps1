@@ -39,3 +39,4 @@ if (-not (Test-Path (Join-Path $ffdir "ffmpeg.exe"))) {
 Write-Host ""
 Write-Host "Setup complete!" -ForegroundColor Green
 Write-Host "Start the app by double-clicking DepthConverter.bat (or:  uv run depthconverter)"
+Write-Host "Or pin DepthConverter.lnk - same app, no console flash at all."

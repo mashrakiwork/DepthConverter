@@ -33,10 +33,12 @@ stage takes its settings live from its own tab.
 
 ## Quick start (new PC)
 
-**Windows**: double-click **`DepthConverter.vbs`** — it opens **no console
-window at all** (on the first run it shows one on purpose, so you can watch
-the setup downloads). `DepthConverter.bat` also works, but batch files always
-flash a brief console — a Windows limitation.
+**Windows**: double-click **`DepthConverter.bat`**. It hands the app to
+`pythonw.exe` and exits, so **no console window stays open** — only a brief
+flash while the batch file itself runs, which is a Windows limitation of any
+`.bat`. The first run shows a console on purpose, so you can watch the setup
+downloads, and it creates **`DepthConverter.lnk`** — use or pin that shortcut
+to launch with the app icon and no flash at all.
 **Linux / macOS**: run **`./depthconverter.sh`**.
 
 On first run the launcher sets up everything automatically:

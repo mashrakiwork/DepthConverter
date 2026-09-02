@@ -73,17 +73,31 @@ class MainWindow(QMainWindow):
         self.cfg.set("ui.scale", int(pct))
         apply_scale(int(pct))
 
+    #: First-run size. Big enough that a whole tab's form is visible without
+    #: scrolling on a 1080p screen; clamped below to whatever the screen has.
+    DEFAULT_SIZE = (1360, 1040)
+
     def _restore_geometry(self):
         """Open at a comfortable size that always fits the actual screen."""
         saved = self.cfg.get("ui.window_size")
         width, height = (saved if isinstance(saved, list) and len(saved) == 2
-                         else (980, 900))
+                         else self.DEFAULT_SIZE)
         screen = self.screen()
         if screen is not None:
             avail = screen.availableGeometry()
             width = min(int(width), avail.width() - 40)
             height = min(int(height), avail.height() - 60)
         self.resize(max(int(width), 560), max(int(height), 400))
+        self._centre_on(screen)
+
+    def _centre_on(self, screen):
+        """A window that opens under the taskbar or half off-screen reads as
+        broken; put it in the middle of the screen it belongs to."""
+        if screen is None:
+            return
+        avail = screen.availableGeometry()
+        self.move(avail.x() + (avail.width() - self.width()) // 2,
+                  avail.y() + (avail.height() - self.height()) // 2)
 
     def closeEvent(self, event):
         self.cfg.set("ui.window_size", [self.width(), self.height()])
