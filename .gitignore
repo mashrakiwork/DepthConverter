@@ -1,5 +1,7 @@
 .venv/
-tools/
+tools/ffmpeg/
+# one-shot scratch edit scripts, not project files
+tools/_*.py
 __pycache__/
 *.pyc
 *.egg-info/
