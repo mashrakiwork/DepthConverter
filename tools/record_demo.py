@@ -35,9 +35,11 @@ most wants to see - what came out - is not something the interface shows. It
 needs the outputs `depth` and `convert` write, so record those in the same
 session.
 
-The demo clip is Pexels 8496259 (https://www.pexels.com/video/8496259/), used
-under the Pexels License: free for commercial use, no attribution required. It
-is downloaded on first run rather than committed, so the repo stays small.
+The demo clip ships in the repo at assets/demo/source.mp4, committed rather
+than fetched so a recording is reproducible offline and survives the source
+going away; it is re-downloaded only if that file is missing. It came from
+Pexels (CLIP_URL below) under the Pexels License, which allows commercial use
+and requires no attribution.
 """
 
 from __future__ import annotations
@@ -61,7 +63,7 @@ except ImportError:  # pragma: no cover
 #: Where the finished GIFs land, beside the README that shows them.
 MEDIA = ROOT / "docs" / "media"
 
-#: The demo clip, and where it is cached. Gitignored - fetched on demand.
+#: The demo clip. Committed with the repo; re-fetched only if the file is gone.
 CLIP_URL = ("https://videos.pexels.com/video-files/8496259/"
             "8496259-hd_1920_1080_25fps.mp4")
 CLIP = ROOT / "assets" / "demo" / "source.mp4"
