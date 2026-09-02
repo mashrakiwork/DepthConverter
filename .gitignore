@@ -21,3 +21,6 @@ config.json
 *.local
 *.log
 *.lnk
+
+# Demo recording: the clip is fetched on demand by tools/record_demo.py
+assets/demo/

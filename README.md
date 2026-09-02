@@ -20,16 +20,37 @@ Three tabs — use what you need, in order:
    map per frame: a grayscale video for video input, 16-bit depth PNGs for
    images (optionally also a slideshow video + depth video at *N* seconds per
    image and a chosen frame rate).
+
+   ![The Depth tab: an input clip and output folder are filled in, a depth
+   model is picked, and Start runs real inference on the GPU — the progress bar
+   counts frames and the log reports the finished depth
+   video.](docs/media/demo-depth.gif)
+
 3. **Converter (SBS)** — pick the original content + its depth content. Each
    frame is warped per-pixel on the GPU into a left/right eye pair and encoded
    as a full-SBS (2× width) or half-SBS video/image. Audio is copied from the
    original (optional). The per-eye aspect ratio is always exactly the source
    aspect ratio.
 
+   ![The Converter tab: the original clip is paired with the depth video from
+   the previous step, 3D strength is raised, and Start warps every frame into a
+   side-by-side pair.](docs/media/demo-convert.gif)
+
 **▶ Run all** — one Start button for the whole chain. Tick the stages you want
 (e.g. untick Upscale if your content is already high-res), pick one input and
 one output folder, and each stage's output feeds the next automatically. Every
 stage takes its settings live from its own tab.
+
+![The Run all tab: one input and output folder, Upscale unticked, and a single
+Start that chains Depth into Convert without touching the other
+tabs.](docs/media/demo-runall.gif)
+
+The three animations above are recordings of the real app doing real work —
+real inference on the GPU, real stereo warping — scripted by
+[`tools/record_demo.py`](tools/record_demo.py), so they can be regenerated
+after any UI change rather than going stale. Each job takes far longer than
+anyone will watch, so the middle of every run is time-lapsed and captioned with
+how much real time was cut.
 
 ## Quick start (new PC)
 
@@ -133,4 +154,22 @@ app/
     upscale.py       AI upscaling (spandrel models, tiled VRAM-safe inference)
     pipeline.py      the jobs (upscale, depth, SBS) + the run-all chain
   ui/                PySide6 tabs (Upscale, Depth, Converter, Run all)
+tools/
+  record_demo.py     scripts the real app and writes the README's GIFs
+docs/media/          those GIFs
 ```
+
+## Regenerating the README animations
+
+```powershell
+uv run python tools/record_demo.py              # every act
+uv run python tools/record_demo.py depth convert
+```
+
+It drives the shipping window, runs the real pipeline, and writes
+`docs/media/demo-*.gif`. The demo clip
+([Pexels 8496259](https://www.pexels.com/video/beautiful-woman-looking-at-camera-8496259/),
+free for commercial use under the [Pexels License](https://www.pexels.com/license/),
+no attribution required) is downloaded on first run instead of being committed,
+so the repo stays small. Recording uses a throwaway settings file, so it never
+touches your own saved paths and options.
