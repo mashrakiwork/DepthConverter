@@ -15,6 +15,11 @@ Three tabs — use what you need, in order:
    overlapping GPU tiles, so even 4K input fits in limited VRAM; the tile size
    halves itself on out-of-memory. Upscaling *before* depth + SBS gives the
    best 3D quality.
+
+   ![The Upscale tab: a 1080p clip and an output folder are filled in,
+   Real-ESRGAN x4plus is selected at 2x, and Start upscales every frame to 4K
+   in overlapping GPU tiles.](docs/media/demo-upscale.gif)
+
 2. **Depth** — pick an input folder (images, or a single video). A monocular
    depth model (Depth Anything V2 etc.) runs on your GPU and produces a depth
    map per frame: a grayscale video for video input, 16-bit depth PNGs for
@@ -45,12 +50,26 @@ stage takes its settings live from its own tab.
 Start that chains Depth into Convert without touching the other
 tabs.](docs/media/demo-runall.gif)
 
-The three animations above are recordings of the real app doing real work —
-real inference on the GPU, real stereo warping — scripted by
+## What comes out
+
+The four panels below play in sync, taken straight from the files the app
+wrote: the original clip, the depth map the model estimated for it, and the two
+halves of the full-SBS frame the converter produced. In a headset the bottom
+two are what each of your eyes sees. They look almost identical because they
+nearly are — each is the same frame shifted horizontally by an amount that
+grows with how near that pixel is, and that difference is the whole of the 3D.
+
+![Four panels playing in sync: the original clip top left, its grayscale depth
+map top right, and below them the left-eye and right-eye halves of the
+side-by-side output.](docs/media/demo-result.gif)
+
+The animations above are recordings of the real app doing real work — real
+inference on the GPU, real stereo warping — scripted by
 [`tools/record_demo.py`](tools/record_demo.py), so they can be regenerated
 after any UI change rather than going stale. Each job takes far longer than
 anyone will watch, so the middle of every run is time-lapsed and captioned with
-how much real time was cut.
+how much real time was cut. The result panels are the actual output files, not
+a mock-up.
 
 ## Quick start (new PC)
 

@@ -27,6 +27,13 @@ commit the new GIFs.
     uv run python tools/record_demo.py            # every act
     uv run python tools/record_demo.py depth      # just one
     uv run python tools/record_demo.py --keep     # leave the working files
+    uv run python tools/record_demo.py result --work=<dir printed by --keep>
+
+The acts are upscale, depth, convert, runall and result. Four of them film the
+interface; `result` films the files instead, because the one thing a reader
+most wants to see - what came out - is not something the interface shows. It
+needs the outputs `depth` and `convert` write, so record those in the same
+session.
 
 The demo clip is Pexels 8496259 (https://www.pexels.com/video/8496259/), used
 under the Pexels License: free for commercial use, no attribution required. It
@@ -77,6 +84,22 @@ FPS = 8
 #: uniformly: frame count is what a GIF costs, and nobody watches a README
 #: animation for half a minute.
 MAX_FRAMES = 80
+
+#: The result composite: width, how many source frames to skip between GIF
+#: frames, and the playback delay. Narrower and sparser than the UI acts even
+#: though it carries four panels, because photographs are far more expensive
+#: than a flat grey form: nothing repeats between frames, so frame differencing
+#: has nothing to remove and every frame costs close to a full picture. At 960
+#: wide and every 4th frame this act alone came to 13 MB.
+RESULT_WIDTH = 680
+RESULT_STRIDE = 9
+RESULT_DELAY = 170
+
+#: Palette depth for the result composite. The full 256 because one of its four
+#: panels is a smooth grey depth ramp: sharing a shallower palette with three
+#: photographs starves the ramp of slots and posterises it into contour bands,
+#: which reads as though the app produced a banded depth map.
+RESULT_COLORS = 256
 
 #: Playback delay bounds, in milliseconds. GIF stores delays in hundredths and
 #: most viewers turn anything under 2 into 10, so 40 is the practical floor.
@@ -167,6 +190,14 @@ class Film:
 # --------------------------------------------------------------------------- #
 
 
+def _elapsed(seconds: float) -> str:
+    """A caption reader should not have to divide. Past a minute and a half,
+    "21 min" beats "1280s"."""
+    if seconds < 90:
+        return f"{seconds:.0f}s"
+    return f"{seconds / 60:.0f} min"
+
+
 class Tour:
     def __init__(self, film: Film, window):
         self.film = film
@@ -236,7 +267,7 @@ class Tour:
 
         elapsed = time.monotonic() - started
         self.film.hold(tail)
-        print(f"  · {label}: {elapsed:.0f}s of real work, time-lapsed")
+        print(f"  · {label}: {_elapsed(elapsed)} of real work, time-lapsed")
         return elapsed
 
 
@@ -245,7 +276,7 @@ class Tour:
 # --------------------------------------------------------------------------- #
 
 
-def build_gif(film: Film, out: Path, colors: int = 64) -> None:
+def build_gif(film: Film, out: Path, colors: int = 64, cap: bool = True) -> None:
     """Quantise against one shared palette and write the GIF."""
     frames, stamps, forced = film.frames, film.stamps, film.forced
     if len(frames) < 2:
@@ -256,7 +287,7 @@ def build_gif(film: Film, out: Path, colors: int = 64) -> None:
     # Resampled to exactly the cap rather than strided by an integer step: a
     # step rounds, so 118 frames against a cap of 80 would round to 1 and thin
     # nothing at all, and a step of 2 would overshoot to 59.
-    if len(frames) > MAX_FRAMES:
+    if cap and len(frames) > MAX_FRAMES:
         last = len(frames) - 1
         picks = [round(i * last / (MAX_FRAMES - 1)) for i in range(MAX_FRAMES)]
         frames = [frames[i] for i in picks]
@@ -311,6 +342,21 @@ def build_gif(film: Film, out: Path, colors: int = 64) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def act_upscale(tour: Tour, work: Path) -> None:
+    """Tab 1: a real Real-ESRGAN pass over the clip."""
+    tab = tour.window.upscale_tab
+    tour.caption("Upscale · run the clip through Real-ESRGAN first")
+    tour.open_tab(0)
+    tour.type_path(tab.input_pick, str(CLIP))
+    tour.type_path(tab.output_pick, str(work / "upscaled"))
+    tour.choose(tab.model_combo, 0)          # Real-ESRGAN x4plus
+    tour.choose(tab.scale_combo, 0)          # 2x - 1080p in, 4K out
+    tour.film.hold(0.8)
+    elapsed = tour.run_job(tab, "upscale", timeout=1800.0)
+    tour.caption(f"Upscale · {_elapsed(elapsed)} of real work, time-lapsed")
+    tour.film.hold(2.2)
+
+
 def act_depth(tour: Tour, work: Path) -> None:
     """Tab 2: a real depth map for the clip."""
     tab = tour.window.depth_tab
@@ -321,7 +367,7 @@ def act_depth(tour: Tour, work: Path) -> None:
     tour.choose(tab.model_combo, 4)          # Depth Anything V2 Small
     tour.film.hold(0.8)
     elapsed = tour.run_job(tab, "depth")
-    tour.caption(f"Depth · {elapsed:.0f}s of real work, time-lapsed")
+    tour.caption(f"Depth · {_elapsed(elapsed)} of real work, time-lapsed")
     tour.film.hold(2.2)
 
 
@@ -345,7 +391,7 @@ def act_convert(tour: Tour, work: Path) -> None:
     tour.tick(tab.aa_check, True)
     tour.caption(None)
     elapsed = tour.run_job(tab, "convert")
-    tour.caption(f"Converter · {elapsed:.0f}s of real work, time-lapsed")
+    tour.caption(f"Converter · {_elapsed(elapsed)} of real work, time-lapsed")
     tour.film.hold(2.2)
 
 
@@ -361,11 +407,90 @@ def act_runall(tour: Tour, work: Path) -> None:
     tour.tick(tab.sbs_check, True)
     tour.caption(None)
     elapsed = tour.run_job(tab, "run all")
-    tour.caption(f"Run all · {elapsed:.0f}s of real work, time-lapsed")
+    tour.caption(f"Run all · {_elapsed(elapsed)} of real work, time-lapsed")
     tour.film.hold(2.2)
 
 
-ACTS = {"depth": act_depth, "convert": act_convert, "runall": act_runall}
+def act_result(tour: Tour, work: Path) -> None:
+    """Not a recording of the app - a look at what it produced.
+
+    Every other act films the interface; this one films the files, because the
+    interface cannot show the one thing a reader most wants to see. Laid out as
+    a 2x2 of equal 1920x1080 cells, which is exactly how the pieces line up:
+    the two inputs on top, and below them the two halves of the full-SBS frame
+    the converter actually wrote.
+    """
+    depth_video = work / f"{CLIP.stem}_depth.mp4"
+    sbs_video = work / f"{CLIP.stem}_Full_SBS_LRF.mp4"
+    missing = [p.name for p in (depth_video, sbs_video) if not p.exists()]
+    if missing:
+        raise SystemExit(
+            f"result needs {', '.join(missing)}, which the depth and convert "
+            f"acts produce. Record them in one session: "
+            f"uv run python tools/record_demo.py depth convert result")
+
+    from app.core.video_io import VideoReader
+
+    print("  · composing from the real output files")
+    cell_w, cell_h = RESULT_WIDTH // 2, (RESULT_WIDTH * 9 // 16) // 2
+    label_font = _font(max(11, cell_h // 11))
+    originals = VideoReader(CLIP).frames()
+    depths = VideoReader(depth_video).frames()
+    stereo = VideoReader(sbs_video).frames()
+
+    film = tour.film
+    film.frames.clear()
+    film.stamps.clear()
+    film.forced.clear()
+
+    # Sampled across the whole clip rather than taking its first seconds at full
+    # rate, so the loop shows all ten seconds of what was actually converted.
+    for index, (orig, depth, pair) in enumerate(zip(originals, depths, stereo)):
+        if index % RESULT_STRIDE:
+            continue
+        half = pair.shape[1] // 2
+        cells = [("Original", orig), ("Depth", depth),
+                 ("Left eye", pair[:, :half]), ("Right eye", pair[:, half:])]
+        sheet = Image.new("RGB", (cell_w * 2, cell_h * 2))
+        for position, (name, array) in enumerate(cells):
+            tile = Image.fromarray(array)
+            if tile.mode != "RGB":
+                tile = tile.convert("RGB")
+            tile = tile.resize((cell_w, cell_h), Image.Resampling.LANCZOS)
+            _label(tile, name, label_font)
+            sheet.paste(tile, ((position % 2) * cell_w, (position // 2) * cell_h))
+        film.frames.append(sheet)
+        film.stamps.append(index / 25.0)
+        film.forced.append(RESULT_DELAY)
+
+    print(f"  · {len(film.frames)} frames from {CLIP.stem}")
+
+
+def _font(size: int):
+    from PIL import ImageFont
+
+    for name in ("segoeui.ttf", "arial.ttf", "DejaVuSans.ttf"):
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _label(tile: Image.Image, text: str, font) -> None:
+    """A caption burnt into the corner of a panel, on a slab dark enough to stay
+    readable over both the bright original and the near-black depth map."""
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(tile, "RGBA")
+    box = draw.textbbox((0, 0), text, font=font)
+    pad = 8
+    draw.rectangle((0, 0, box[2] + pad * 2, box[3] + pad * 2), fill=(0, 0, 0, 190))
+    draw.text((pad, pad), text, font=font, fill=(255, 255, 255, 255))
+
+
+ACTS = {"upscale": act_upscale, "depth": act_depth, "convert": act_convert,
+        "runall": act_runall, "result": act_result}
 
 
 # --------------------------------------------------------------------------- #
@@ -457,7 +582,18 @@ def main() -> None:
                  f"Choose from: {', '.join(ACTS)}")
 
     fetch_clip()
-    work = Path(tempfile.mkdtemp(prefix="depthconverter-demo-"))
+    # --work reuses an earlier --keep directory. `result` composes from files
+    # the pipeline already wrote, so retuning its palette or frame rate should
+    # not mean running the GPU through the whole clip again.
+    reuse = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--work=")),
+                 None)
+    if reuse:
+        work = Path(reuse)
+        if not work.is_dir():
+            sys.exit(f"--work: no such directory: {work}")
+        keep = True
+    else:
+        work = Path(tempfile.mkdtemp(prefix="depthconverter-demo-"))
     print(f"working in {work}")
     qapp, window = build_window(work)
 
@@ -466,10 +602,17 @@ def main() -> None:
             print(f"filming {name}")
             film = Film(qapp, window)
             tour = Tour(film, window)
-            film.hold(0.6)
+            if name != "result":
+                film.hold(0.6)
             ACTS[name](tour, work)
             tour.caption(None)
-            build_gif(film, MEDIA / f"demo-{name}.gif")
+            # Photographs need a deeper palette than a flat grey form does, and
+            # the composite is already trimmed to the frames it wants.
+            if name == "result":
+                build_gif(film, MEDIA / "demo-result.gif",
+                          colors=RESULT_COLORS, cap=False)
+            else:
+                build_gif(film, MEDIA / f"demo-{name}.gif")
     finally:
         window.close()
         if keep:
