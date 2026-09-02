@@ -186,9 +186,12 @@ uv run python tools/record_demo.py depth convert
 ```
 
 It drives the shipping window, runs the real pipeline, and writes
-`docs/media/demo-*.gif`. The demo clip
-([Pexels 8496259](https://www.pexels.com/video/beautiful-woman-looking-at-camera-8496259/),
-free for commercial use under the [Pexels License](https://www.pexels.com/license/),
-no attribution required) is downloaded on first run instead of being committed,
-so the repo stays small. Recording uses a throwaway settings file, so it never
+`docs/media/demo-*.gif`. Recording uses a throwaway settings file, so it never
 touches your own saved paths and options.
+
+The demo clip ships in the repo at `assets/demo/source.mp4`, committed rather
+than fetched so a recording is reproducible offline and survives the source
+going away. It came from
+[Pexels](https://www.pexels.com/video/beautiful-woman-looking-at-camera-8496259/)
+under the [Pexels License](https://www.pexels.com/license/), which allows
+commercial use and requires no attribution.
