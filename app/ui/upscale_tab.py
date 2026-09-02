@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QVBoxLayout,
+    QMessageBox, QPushButton,
 )
 
 from app.core.upscale import UPSCALE_MODELS, parse_model_spec
@@ -12,7 +12,7 @@ from app.ui.common import MEDIA_FILTER, EncodingGroup, JobTab, PathPicker
 class UpscaleTab(JobTab):
     def __init__(self, cfg):
         super().__init__(cfg)
-        layout = QVBoxLayout(self)
+        layout = self._body()
 
         folders = QGroupBox("Input / output")
         fgrid = QGridLayout(folders)
@@ -110,7 +110,7 @@ class UpscaleTab(JobTab):
         self.encoding = EncodingGroup(cfg, "upscale.")
         layout.addWidget(self.encoding)
 
-        self._add_run_controls(layout)
+        self._add_run_controls()
 
     def _model_spec(self) -> tuple[str, str]:
         idx = self.model_combo.currentIndex()

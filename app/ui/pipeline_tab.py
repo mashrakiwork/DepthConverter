@@ -17,7 +17,7 @@ class PipelineTab(JobTab):
         super().__init__(cfg)
         self._tabs = {"upscale": upscale_tab, "depth": depth_tab,
                       "sbs": converter_tab}
-        layout = QVBoxLayout(self)
+        layout = self._body()
 
         paths = QGroupBox("Input / output")
         pgrid = QGridLayout(paths)
@@ -60,7 +60,7 @@ class PipelineTab(JobTab):
         sgrid.addWidget(note)
         layout.addWidget(stages)
 
-        self._add_run_controls(layout)
+        self._add_run_controls()
 
     def build_opts(self) -> dict:
         if not self.input_pick.path():

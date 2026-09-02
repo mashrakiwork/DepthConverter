@@ -2,7 +2,6 @@
 
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QLabel,
-    QVBoxLayout,
 )
 
 from app.ui.common import MEDIA_FILTER, EncodingGroup, JobTab, PathPicker
@@ -11,7 +10,7 @@ from app.ui.common import MEDIA_FILTER, EncodingGroup, JobTab, PathPicker
 class ConverterTab(JobTab):
     def __init__(self, cfg):
         super().__init__(cfg)
-        layout = QVBoxLayout(self)
+        layout = self._body()
 
         paths = QGroupBox("Content")
         pgrid = QGridLayout(paths)
@@ -162,7 +161,7 @@ class ConverterTab(JobTab):
         self.encoding = EncodingGroup(cfg, "sbs.")
         layout.addWidget(self.encoding)
 
-        self._add_run_controls(layout)
+        self._add_run_controls()
 
     def stage_opts(self) -> dict:
         """Everything except the content paths (also used by Run all)."""

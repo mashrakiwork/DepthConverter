@@ -1,2 +1,4 @@
 @echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1"
+rem Hands straight over to the console-free VBS launcher, then exits - so no
+rem terminal window is ever left attached to the app window.
+start "" wscript.exe "%~dp0DepthConverter.vbs"

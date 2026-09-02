@@ -2,7 +2,7 @@
 
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QMessageBox, QPushButton, QSpinBox, QVBoxLayout,
+    QLabel, QMessageBox, QPushButton, QSpinBox,
 )
 
 from app.core.models import MODELS
@@ -12,7 +12,7 @@ from app.ui.common import MEDIA_FILTER, EncodingGroup, JobTab, PathPicker
 class DepthTab(JobTab):
     def __init__(self, cfg):
         super().__init__(cfg)
-        layout = QVBoxLayout(self)
+        layout = self._body()
 
         folders = QGroupBox("Input / output")
         fgrid = QGridLayout(folders)
@@ -129,7 +129,7 @@ class DepthTab(JobTab):
         self.encoding = EncodingGroup(cfg, "depth.")
         layout.addWidget(self.encoding)
 
-        self._add_run_controls(layout)
+        self._add_run_controls()
 
     def _delete_model(self):
         from app.core.models import cached_size_bytes, delete_cached

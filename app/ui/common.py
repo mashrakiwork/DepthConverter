@@ -3,11 +3,12 @@
 import threading
 import traceback
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QSpinBox, QVBoxLayout, QWidget,
+    QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGridLayout, QGroupBox,
+    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar,
+    QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter, QVBoxLayout,
+    QWidget,
 )
 
 from app.core.video_io import available_encoders
@@ -59,6 +60,7 @@ class PathPicker(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         self.edit = QLineEdit(cfg.get(key, ""))
+        self.edit.setMinimumWidth(200)
         self.edit.setPlaceholderText(placeholder)
         self.edit.editingFinished.connect(self._save)
         row.addWidget(self.edit, 1)
@@ -151,36 +153,101 @@ class EncodingGroup(QGroupBox):
 
 
 class JobTab(QWidget):
-    """Base for both tabs: subclasses build their form, then call
-    _add_run_controls(layout); build_opts() + job_fn() drive the worker."""
+    """Base for every tab: subclasses add their groups to the layout returned by
+    _body(), then call _add_run_controls(); build_opts() + job_fn() drive the
+    worker.
+
+    The form lives in a scroll area and the run controls in a fixed panel
+    below it, so the whole tab stays usable at any window size - nothing is
+    ever clipped out of reach.
+    """
 
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
         self.worker: Worker | None = None
 
-    def _add_run_controls(self, layout: QVBoxLayout):
+    def _body(self) -> QVBoxLayout:
+        """Build the scrollable form area and return its layout."""
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        self._split = QSplitter(Qt.Orientation.Vertical)
+        self._split.setChildrenCollapsible(False)
+        outer.addWidget(self._split)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        content = QWidget()
+        form = QVBoxLayout(content)
+        form.setContentsMargins(12, 12, 12, 12)
+        form.setSpacing(10)
+        scroll.setWidget(content)
+        self._split.addWidget(scroll)
+        self._form = form
+        return form
+
+    def _add_run_controls(self, layout: QVBoxLayout | None = None):
+        self._pin_value_fields()
+        # Groups keep their natural height; spare room goes to the log panel.
+        self._form.addStretch(1)
+
+        panel = QWidget()
+        pcol = QVBoxLayout(panel)
+        pcol.setContentsMargins(12, 8, 12, 10)
+        pcol.setSpacing(6)
+
         row = QHBoxLayout()
         self.start_btn = QPushButton("Start")
-        self.start_btn.setMinimumHeight(34)
+        self.start_btn.setMinimumHeight(38)
         self.start_btn.clicked.connect(self._start)
         self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setMinimumHeight(38)
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.clicked.connect(self._cancel)
         row.addWidget(self.start_btn, 1)
         row.addWidget(self.cancel_btn)
-        layout.addLayout(row)
+        pcol.addLayout(row)
 
         self.bar = QProgressBar()
         self.bar.setRange(0, 1000)
         self.status = QLabel("Idle")
-        layout.addWidget(self.bar)
-        layout.addWidget(self.status)
+        self.status.setWordWrap(True)
+        pcol.addWidget(self.bar)
+        pcol.addWidget(self.status)
 
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumBlockCount(5000)
-        layout.addWidget(self.log_view, 1)
+        self.log_view.setMinimumHeight(80)
+        self.log_view.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                    QSizePolicy.Policy.Expanding)
+        pcol.addWidget(self.log_view, 1)
+
+        panel.setMinimumHeight(170)
+        self._split.addWidget(panel)
+        # The form gets the room; the log panel keeps a useful minimum. Both
+        # stay draggable so a long job log can be pulled up over the form.
+        self._split.setStretchFactor(0, 4)
+        self._split.setStretchFactor(1, 1)
+        self._split.setSizes([700, 240])
+
+    def _pin_value_fields(self):
+        """Keep numbers and short dropdowns beside their label.
+
+        Form grids stretch their value column so path fields can use the whole
+        row; without this, a two-character spin box would sit alone at the far
+        right edge of the window.
+        """
+        for grid in self.findChildren(QGridLayout):
+            for i in range(grid.count()):
+                widget = grid.itemAt(i).widget()
+                if isinstance(widget, (QComboBox, QSpinBox, QDoubleSpinBox)):
+                    grid.setAlignment(widget, Qt.AlignmentFlag.AlignLeft
+                                      | Qt.AlignmentFlag.AlignVCenter)
 
     # subclasses override
     def build_opts(self) -> dict:

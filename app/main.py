@@ -19,7 +19,6 @@ def main() -> int:
             "DepthConverter.DepthConverter")
 
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
     # Crisp scaling on high-DPI / mixed-DPI monitor setups.
@@ -27,10 +26,15 @@ def main() -> int:
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
     app.setApplicationName("DepthConverter")
+    app.setOrganizationName("DepthConverter")
     app.setStyle("Fusion")
-    from pathlib import Path
-    app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent
-                                / "assets" / "icon.png")))
+
+    from app.config import Config
+    from app.ui.icon import app_icon
+    from app.ui.theme import DEFAULT_SCALE, apply_scale
+
+    app.setWindowIcon(app_icon())
+    apply_scale(int(Config().get("ui.scale", DEFAULT_SCALE)))
 
     from app.ui.main_window import MainWindow
 
