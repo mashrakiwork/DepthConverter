@@ -1,11 +1,13 @@
 """Record the walkthroughs the README shows.
 
 Drives the real Qt app in-process, screenshots its window while a scripted tour
-uses it, and writes the frames out as animated GIFs - one per act.
+uses it, and encodes the frames as short H.264 MP4 clips - one per act.
 
-Acts rather than one film, because the whole tour runs for minutes and a GIF of
-that length is tens of megabytes whatever you do to the palette: frame count is
-what costs, not colours. Split up, each piece lands beside the README section it
+MP4 rather than GIF: sharper at 1080p and a fraction of the size. The clips are
+uploaded to GitHub and embedded by URL, not committed, so the repo never carries
+their weight. (Pass `--format gif` for the old GIFs, or `both`.)
+
+Acts rather than one film, so each piece lands beside the README section it
 illustrates and is small enough that someone reading on a phone actually sees
 it. They are filmed in one continuous session, so state carries from one act to
 the next - the depth video that `depth` produces is the one `convert` turns into
@@ -22,12 +24,14 @@ be.
 Why drive the app in-process rather than a screen recorder: a hand-recorded clip
 is stale the moment the interface changes, and re-recording one by hand is enough
 work that nobody does it. This is a build step. Change the app, run it again,
-commit the new GIFs.
+re-upload the clips.
 
     uv run python tools/record_demo.py            # every act
     uv run python tools/record_demo.py depth      # just one
+    uv run python tools/record_demo.py --format gif   # old GIFs instead of MP4
     uv run python tools/record_demo.py --keep     # leave the working files
     uv run python tools/record_demo.py result --work=<dir printed by --keep>
+    uv run python tools/record_demo.py --out-dir=<dir>   # where clips are written
 
 The acts are upscale, depth, convert, runall and result. Four of them film the
 interface; `result` films the files instead, because the one thing a reader
@@ -46,6 +50,7 @@ from __future__ import annotations
 
 import io
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -64,16 +69,19 @@ except ImportError:  # pragma: no cover
 MEDIA = ROOT / "docs" / "media"
 
 #: The demo clip. Committed with the repo; re-fetched only if the file is gone.
-CLIP_URL = ("https://videos.pexels.com/video-files/8496259/"
-            "8496259-hd_1920_1080_25fps.mp4")
+CLIP_URL = (
+    "https://videos.pexels.com/video-files/8496259/8496259-hd_1920_1080_25fps.mp4"
+)
 CLIP = ROOT / "assets" / "demo" / "source.mp4"
 
-#: The app renders at this logical size and the GIF is scaled down from it.
-#: Bigger than the output on purpose: downscaling averages away the subpixel
-#: text fringing that a 64-colour palette would otherwise turn into coloured
-#: speckle along every letter. Tall enough that a whole tab's form and the log
-#: panel are both in frame without scrolling.
-WINDOW_SIZE = (1120, 880)
+#: The app renders at this logical size; the whole tab's form and the log panel
+#: are both in frame. Captured natively for MP4 (~1080 tall), scaled down for GIF.
+WINDOW_SIZE = (1376, 1080)
+
+#: H.264 output: normalise to 1080 tall, quality (lower is sharper), frame rate.
+MP4_HEIGHT = 1080
+CRF = 23
+MP4_FPS = 30
 
 #: Output width of the GIFs. Wide enough to read the field labels on a phone.
 GIF_WIDTH = 820
@@ -125,9 +133,23 @@ class Film:
     def __init__(self, app, window):
         self.app = app
         self.window = window
-        self.frames: list[Image.Image] = []
+        #: Frames stream to disk (only paths held); the encoder reads them back.
+        self.dir = Path(tempfile.mkdtemp(prefix="depthconverter-frames-"))
+        self.frames: list[Path] = []
         self.stamps: list[float] = []
         self.forced: list[int | None] = []
+
+    def add(
+        self, image: Image.Image, hold_ms: int | None, stamp: float | None = None
+    ) -> None:
+        path = self.dir / f"frame-{len(self.frames):06d}.png"
+        image.save(path)
+        self.frames.append(path)
+        self.stamps.append(time.monotonic() if stamp is None else stamp)
+        self.forced.append(hold_ms)
+
+    def cleanup(self) -> None:
+        shutil.rmtree(self.dir, ignore_errors=True)
 
     def shoot(self, hold_ms: int | None = None) -> None:
         from PySide6.QtCore import QBuffer, QByteArray
@@ -142,15 +164,8 @@ class Film:
         buffer.open(QBuffer.OpenModeFlag.WriteOnly)
         pixmap.save(buffer, "PNG")
         buffer.close()
-        image = Image.open(io.BytesIO(bytes(data))).convert("RGB")
-        # Downscaled on capture rather than at assembly: an act is hundreds of
-        # frames, and holding them at 2x device pixels costs gigabytes of
-        # memory for pixels that are thrown away at the end anyway.
-        scale = GIF_WIDTH / image.width
-        self.frames.append(image.resize(
-            (GIF_WIDTH, round(image.height * scale)), Image.Resampling.LANCZOS))
-        self.stamps.append(time.monotonic())
-        self.forced.append(hold_ms)
+        # Kept at native resolution; the encoder scales and (for GIF) quantises.
+        self.add(Image.open(io.BytesIO(bytes(data))).convert("RGB"), hold_ms)
 
     def hold(self, seconds: float) -> None:
         """Film in real time for a while, at roughly FPS.
@@ -178,6 +193,8 @@ class Film:
 
     def lapse(self, first: int) -> None:
         """Halve the frames captured since `first`, keeping every second one."""
+        for path in self.frames[first + 1 :: 2]:
+            path.unlink(missing_ok=True)
         self.frames[first:] = self.frames[first::2]
         self.stamps[first:] = self.stamps[first::2]
         self.forced[first:] = self.forced[first::2]
@@ -244,8 +261,15 @@ class Tour:
 
     # -- running a real job ------------------------------------------------- #
 
-    def run_job(self, tab, label: str, *, lead: float = 2.5,
-                tail: float = 1.6, timeout: float = 900.0) -> float:
+    def run_job(
+        self,
+        tab,
+        label: str,
+        *,
+        lead: float = 2.5,
+        tail: float = 1.6,
+        timeout: float = 900.0,
+    ) -> float:
         """Press Start, film the beginning, cut the middle, film the end.
 
         Returns the real wall-clock seconds the job took, which the caller
@@ -278,7 +302,103 @@ class Tour:
 # --------------------------------------------------------------------------- #
 
 
-def build_gif(film: Film, out: Path, colors: int = 64, cap: bool = True) -> None:
+def find_ffmpeg() -> str:
+    bundled = ROOT / "tools" / "ffmpeg" / "ffmpeg.exe"
+    if bundled.exists():
+        return str(bundled)
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    sys.exit(
+        "ffmpeg not found. Put it in tools/ffmpeg or on PATH, or use --format gif."
+    )
+
+
+def frame_durations(stamps: list[float], forced: list[int | None]) -> list[int]:
+    """Per-frame on-screen time in ms: a forced hold, else real elapsed time to
+    the next frame, clamped to MIN_DELAY..MAX_DELAY."""
+    durations: list[int] = []
+    for index in range(len(stamps)):
+        override = forced[index]
+        if override is not None:
+            durations.append(max(MIN_DELAY, override))
+        elif index + 1 < len(stamps):
+            durations.append(
+                min(
+                    MAX_DELAY,
+                    max(MIN_DELAY, round((stamps[index + 1] - stamps[index]) * 1000)),
+                )
+            )
+        else:
+            durations.append(durations[-1] if durations else 140)
+    return durations
+
+
+def build_mp4(film: Film, out: Path, ffmpeg: str) -> None:
+    """Encode the frames as H.264, holding each for its real duration via the
+    concat demuxer, scaled to 1080 tall and resampled to a constant frame rate."""
+    frames, stamps, forced = film.frames, film.stamps, film.forced
+    if len(frames) < 2:
+        print(f"  ! {out.name}: nothing captured", file=sys.stderr)
+        return
+
+    durations = frame_durations(stamps, forced)
+    work = frames[0].parent
+    lines: list[str] = []
+    for path, ms in zip(frames, durations, strict=True):
+        lines.append(f"file '{path.name}'")
+        lines.append(f"duration {ms / 1000:.4f}")
+    lines.append(f"file '{frames[-1].name}'")
+    listing = work / f"{out.stem}.concat.txt"
+    listing.write_text("\n".join(lines), encoding="utf-8")
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [
+            ffmpeg,
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            listing.name,
+            "-vf",
+            f"scale=-2:{MP4_HEIGHT},fps={MP4_FPS},format=yuv420p",
+            "-c:v",
+            "libx264",
+            "-crf",
+            str(CRF),
+            "-preset",
+            "veryslow",
+            "-movflags",
+            "+faststart",
+            str(out),
+        ],
+        cwd=work,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    listing.unlink(missing_ok=True)
+    if result.returncode != 0:
+        sys.exit(
+            f"ffmpeg failed on {out.name}:\n{result.stderr.decode(errors='replace')}"
+        )
+    span = stamps[-1] - stamps[0]
+    print(
+        f"wrote {out.name}: {len(frames)} frames, {span:.0f}s filmed, "
+        f"{out.stat().st_size / 1_000_000:.1f} MB"
+    )
+
+
+def build_gif(
+    film: Film,
+    out: Path,
+    colors: int = 64,
+    cap: bool = True,
+    width: int | None = GIF_WIDTH,
+) -> None:
     """Quantise against one shared palette and write the GIF."""
     frames, stamps, forced = film.frames, film.stamps, film.forced
     if len(frames) < 2:
@@ -286,9 +406,6 @@ def build_gif(film: Film, out: Path, colors: int = 64, cap: bool = True) -> None
         return
 
     # Thin the whole act if it still runs long after the per-phase cuts.
-    # Resampled to exactly the cap rather than strided by an integer step: a
-    # step rounds, so 118 frames against a cap of 80 would round to 1 and thin
-    # nothing at all, and a step of 2 would overshoot to 59.
     if cap and len(frames) > MAX_FRAMES:
         last = len(frames) - 1
         picks = [round(i * last / (MAX_FRAMES - 1)) for i in range(MAX_FRAMES)]
@@ -296,47 +413,49 @@ def build_gif(film: Film, out: Path, colors: int = 64, cap: bool = True) -> None
         stamps = [stamps[i] for i in picks]
         forced = [forced[i] for i in picks]
 
-    # One palette for the whole animation, derived from a strip of sampled
-    # frames. Per-frame palettes track colour better but defeat the frame
-    # differencing that keeps a GIF of a mostly-static form small, and they make
-    # the background shimmer between frames that should be identical.
-    step = max(1, len(frames) // 24)
-    sample = frames[::step]
-    size = frames[0].size
+    # Read the PNGs back, downscaling UI frames to the GIF width (result sheets
+    # are already at their own size, so those pass width=None).
+    images: list[Image.Image] = []
+    for path in frames:
+        image = Image.open(path).convert("RGB")
+        if width and image.width != width:
+            scale = width / image.width
+            image = image.resize(
+                (width, round(image.height * scale)), Image.Resampling.LANCZOS
+            )
+        images.append(image)
+
+    # One shared palette, from a strip of sampled frames, so frame differencing
+    # keeps the file small and the background does not shimmer.
+    step = max(1, len(images) // 24)
+    sample = images[::step]
+    size = images[0].size
     strip = Image.new("RGB", (size[0], size[1] * len(sample)))
     for index, frame in enumerate(sample):
         strip.paste(frame, (0, index * size[1]))
     palette = strip.quantize(colors=colors, method=Image.Quantize.MEDIANCUT)
 
-    # dither=NONE deliberately. Floyd-Steinberg looks better on one still frame
-    # and is a disaster across an animation: the noise it adds differs everywhere
-    # frame to frame, so nothing compresses and the file roughly triples for an
-    # interface that is mostly flat dark grey anyway.
-    quantised = [f.quantize(palette=palette, dither=Image.Dither.NONE)
-                 for f in frames]
+    # dither=NONE: Floyd-Steinberg noise differs every frame, so nothing
+    # compresses and the file roughly triples.
+    quantised = [f.quantize(palette=palette, dither=Image.Dither.NONE) for f in images]
 
-    # Real elapsed time per frame, so a slow capture holds rather than playback
-    # quietly running fast. Clamped at both ends: GIF stores delays in hundredths
-    # and most viewers turn anything under 2 into 10, and a frame that took four
-    # seconds to capture because the GPU was busy should not stall the animation.
-    durations: list[int] = []
-    for index in range(len(frames)):
-        override = forced[index]
-        if override is not None:
-            durations.append(max(MIN_DELAY, override))
-        elif index + 1 < len(stamps):
-            durations.append(min(MAX_DELAY, max(
-                MIN_DELAY, round((stamps[index + 1] - stamps[index]) * 1000))))
-        else:
-            durations.append(durations[-1] if durations else 140)
-
+    durations = frame_durations(stamps, forced)
     out.parent.mkdir(parents=True, exist_ok=True)
-    quantised[0].save(out, save_all=True, append_images=quantised[1:],
-                      duration=durations, loop=0, optimize=True, disposal=2)
+    quantised[0].save(
+        out,
+        save_all=True,
+        append_images=quantised[1:],
+        duration=durations,
+        loop=0,
+        optimize=True,
+        disposal=2,
+    )
     span = stamps[-1] - stamps[0]
-    print(f"wrote {out.name}: {len(frames)} frames, {span:.0f}s filmed, "
-          f"{sum(durations) / 1000:.0f}s playback, "
-          f"{out.stat().st_size / 1_000_000:.1f} MB")
+    print(
+        f"wrote {out.name}: {len(frames)} frames, {span:.0f}s filmed, "
+        f"{sum(durations) / 1000:.0f}s playback, "
+        f"{out.stat().st_size / 1_000_000:.1f} MB"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -351,8 +470,8 @@ def act_upscale(tour: Tour, work: Path) -> None:
     tour.open_tab(0)
     tour.type_path(tab.input_pick, str(CLIP))
     tour.type_path(tab.output_pick, str(work / "upscaled"))
-    tour.choose(tab.model_combo, 0)          # Real-ESRGAN x4plus
-    tour.choose(tab.scale_combo, 0)          # 2x - 1080p in, 4K out
+    tour.choose(tab.model_combo, 0)  # Real-ESRGAN x4plus
+    tour.choose(tab.scale_combo, 0)  # 2x - 1080p in, 4K out
     tour.film.hold(0.8)
     elapsed = tour.run_job(tab, "upscale", timeout=1800.0)
     tour.caption(f"Upscale · {_elapsed(elapsed)} of real work, time-lapsed")
@@ -366,7 +485,7 @@ def act_depth(tour: Tour, work: Path) -> None:
     tour.open_tab(1)
     tour.type_path(tab.input_pick, str(CLIP))
     tour.type_path(tab.output_pick, str(work))
-    tour.choose(tab.model_combo, 4)          # Depth Anything V2 Small
+    tour.choose(tab.model_combo, 4)  # Depth Anything V2 Small
     tour.film.hold(0.8)
     elapsed = tour.run_job(tab, "depth")
     tour.caption(f"Depth · {_elapsed(elapsed)} of real work, time-lapsed")
@@ -380,7 +499,8 @@ def act_convert(tour: Tour, work: Path) -> None:
     if not depth_video.exists():
         raise SystemExit(
             "convert needs the depth video the depth act produces. Record both "
-            "in one session: uv run python tools/record_demo.py depth convert")
+            "in one session: uv run python tools/record_demo.py depth convert"
+        )
     tour.caption("Converter · warp the clip into side-by-side 3D")
     tour.open_tab(2)
     tour.type_path(tab.orig_pick, str(CLIP))
@@ -429,7 +549,8 @@ def act_result(tour: Tour, work: Path) -> None:
         raise SystemExit(
             f"result needs {', '.join(missing)}, which the depth and convert "
             f"acts produce. Record them in one session: "
-            f"uv run python tools/record_demo.py depth convert result")
+            f"uv run python tools/record_demo.py depth convert result"
+        )
 
     from app.core.video_io import VideoReader
 
@@ -451,8 +572,12 @@ def act_result(tour: Tour, work: Path) -> None:
         if index % RESULT_STRIDE:
             continue
         half = pair.shape[1] // 2
-        cells = [("Original", orig), ("Depth", depth),
-                 ("Left eye", pair[:, :half]), ("Right eye", pair[:, half:])]
+        cells = [
+            ("Original", orig),
+            ("Depth", depth),
+            ("Left eye", pair[:, :half]),
+            ("Right eye", pair[:, half:]),
+        ]
         sheet = Image.new("RGB", (cell_w * 2, cell_h * 2))
         for position, (name, array) in enumerate(cells):
             tile = Image.fromarray(array)
@@ -461,9 +586,7 @@ def act_result(tour: Tour, work: Path) -> None:
             tile = tile.resize((cell_w, cell_h), Image.Resampling.LANCZOS)
             _label(tile, name, label_font)
             sheet.paste(tile, ((position % 2) * cell_w, (position // 2) * cell_h))
-        film.frames.append(sheet)
-        film.stamps.append(index / 25.0)
-        film.forced.append(RESULT_DELAY)
+        film.add(sheet, RESULT_DELAY, stamp=index / 25.0)
 
     print(f"  · {len(film.frames)} frames from {CLIP.stem}")
 
@@ -491,8 +614,13 @@ def _label(tile: Image.Image, text: str, font) -> None:
     draw.text((pad, pad), text, font=font, fill=(255, 255, 255, 255))
 
 
-ACTS = {"upscale": act_upscale, "depth": act_depth, "convert": act_convert,
-        "runall": act_runall, "result": act_result}
+ACTS = {
+    "upscale": act_upscale,
+    "depth": act_depth,
+    "convert": act_convert,
+    "runall": act_runall,
+    "result": act_result,
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -526,7 +654,8 @@ def build_window(work: Path):
     config.CONFIG_FILE = config.CONFIG_DIR / "config.json"
 
     QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     qapp = QApplication(sys.argv)
     qapp.setStyle("Fusion")
 
@@ -543,10 +672,12 @@ def build_window(work: Path):
 
     # The tour needs to reach the tabs by name; the window builds them
     # anonymously, so pick them back out of the tab bar.
-    widgets = [window.centralWidget().widget(i)
-               for i in range(window.centralWidget().count())]
-    window.upscale_tab, window.depth_tab, window.converter_tab, \
-        window.pipeline_tab = widgets
+    widgets = [
+        window.centralWidget().widget(i) for i in range(window.centralWidget().count())
+    ]
+    window.upscale_tab, window.depth_tab, window.converter_tab, window.pipeline_tab = (
+        widgets
+    )
 
     # A caption strip, drawn over the window in the app's own surface colours so
     # it reads as part of the recording rather than as a sticker on top of it.
@@ -555,7 +686,8 @@ def build_window(work: Path):
     banner.setStyleSheet(
         "background: rgba(20,20,22,0.92); color: #f0f0f2;"
         "font-size: 15pt; font-weight: 600; padding: 10px;"
-        "border-top: 1px solid rgba(255,255,255,0.18);")
+        "border-top: 1px solid rgba(255,255,255,0.18);"
+    )
     banner.hide()
 
     def set_caption(text: str | None) -> None:
@@ -580,15 +712,35 @@ def main() -> None:
     wanted = args or list(ACTS)
     unknown = [name for name in wanted if name not in ACTS]
     if unknown:
-        sys.exit(f"unknown act(s): {', '.join(unknown)}. "
-                 f"Choose from: {', '.join(ACTS)}")
+        sys.exit(
+            f"unknown act(s): {', '.join(unknown)}. Choose from: {', '.join(ACTS)}"
+        )
+
+    fmt = next(
+        (a.split("=", 1)[1] for a in sys.argv if a.startswith("--format=")), "mp4"
+    )
+    formats = {"mp4", "gif"} if fmt == "both" else {fmt}
+    if formats - {"mp4", "gif"}:
+        sys.exit(f"unknown format {fmt!r}. Pick mp4, gif or both.")
+    ffmpeg = find_ffmpeg() if "mp4" in formats else ""
+
+    out_dir = next(
+        (a.split("=", 1)[1] for a in sys.argv if a.startswith("--out-dir=")), None
+    )
+    out = Path(out_dir) if out_dir else MEDIA
+
+    # Bigger result cells for a sharp 1920x1080 MP4 composite.
+    global RESULT_WIDTH
+    if "mp4" in formats:
+        RESULT_WIDTH = 1920
 
     fetch_clip()
     # --work reuses an earlier --keep directory. `result` composes from files
     # the pipeline already wrote, so retuning its palette or frame rate should
     # not mean running the GPU through the whole clip again.
-    reuse = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--work=")),
-                 None)
+    reuse = next(
+        (a.split("=", 1)[1] for a in sys.argv if a.startswith("--work=")), None
+    )
     if reuse:
         work = Path(reuse)
         if not work.is_dir():
@@ -608,13 +760,22 @@ def main() -> None:
                 film.hold(0.6)
             ACTS[name](tour, work)
             tour.caption(None)
-            # Photographs need a deeper palette than a flat grey form does, and
-            # the composite is already trimmed to the frames it wants.
-            if name == "result":
-                build_gif(film, MEDIA / "demo-result.gif",
-                          colors=RESULT_COLORS, cap=False)
-            else:
-                build_gif(film, MEDIA / f"demo-{name}.gif")
+            try:
+                if "mp4" in formats:
+                    build_mp4(film, out / f"demo-{name}.mp4", ffmpeg)
+                if "gif" in formats and name == "result":
+                    # Deeper palette and its own size; the composite is pre-trimmed.
+                    build_gif(
+                        film,
+                        out / "demo-result.gif",
+                        colors=RESULT_COLORS,
+                        cap=False,
+                        width=None,
+                    )
+                elif "gif" in formats:
+                    build_gif(film, out / f"demo-{name}.gif")
+            finally:
+                film.cleanup()
     finally:
         window.close()
         if keep:

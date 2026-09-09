@@ -16,9 +16,7 @@ Three tabs — use what you need, in order:
    halves itself on out-of-memory. Upscaling *before* depth + SBS gives the
    best 3D quality.
 
-   ![The Upscale tab: a 1080p clip and an output folder are filled in,
-   Real-ESRGAN x4plus is selected at 2x, and Start upscales every frame to 4K
-   in overlapping GPU tiles.](docs/media/demo-upscale.gif)
+   https://github.com/user-attachments/assets/85516f4b-c329-40d6-98a7-fa3ccf4bf282
 
 2. **Depth** — pick an input folder (images, or a single video). A monocular
    depth model (Depth Anything V2 etc.) runs on your GPU and produces a depth
@@ -26,10 +24,7 @@ Three tabs — use what you need, in order:
    images (optionally also a slideshow video + depth video at *N* seconds per
    image and a chosen frame rate).
 
-   ![The Depth tab: an input clip and output folder are filled in, a depth
-   model is picked, and Start runs real inference on the GPU — the progress bar
-   counts frames and the log reports the finished depth
-   video.](docs/media/demo-depth.gif)
+   https://github.com/user-attachments/assets/7c46717f-299a-446d-93dc-724c26d8b7e1
 
 3. **Converter (SBS)** — pick the original content + its depth content. Each
    frame is warped per-pixel on the GPU into a left/right eye pair and encoded
@@ -37,18 +32,14 @@ Three tabs — use what you need, in order:
    original (optional). The per-eye aspect ratio is always exactly the source
    aspect ratio.
 
-   ![The Converter tab: the original clip is paired with the depth video from
-   the previous step, 3D strength is raised, and Start warps every frame into a
-   side-by-side pair.](docs/media/demo-convert.gif)
+   https://github.com/user-attachments/assets/55a13e07-20ac-43b7-bf11-0b875a80a6ed
 
 **▶ Run all** — one Start button for the whole chain. Tick the stages you want
 (e.g. untick Upscale if your content is already high-res), pick one input and
 one output folder, and each stage's output feeds the next automatically. Every
 stage takes its settings live from its own tab.
 
-![The Run all tab: one input and output folder, Upscale unticked, and a single
-Start that chains Depth into Convert without touching the other
-tabs.](docs/media/demo-runall.gif)
+https://github.com/user-attachments/assets/15c71142-bf26-4796-95bb-34cab83a839f
 
 ## What comes out
 
@@ -59,14 +50,13 @@ two are what each of your eyes sees. They look almost identical because they
 nearly are — each is the same frame shifted horizontally by an amount that
 grows with how near that pixel is, and that difference is the whole of the 3D.
 
-![Four panels playing in sync: the original clip top left, its grayscale depth
-map top right, and below them the left-eye and right-eye halves of the
-side-by-side output.](docs/media/demo-result.gif)
+https://github.com/user-attachments/assets/a6da9150-5362-4331-82d3-b8d2b372afae
 
-The animations above are recordings of the real app doing real work — real
+The clips above are recordings of the real app doing real work — real
 inference on the GPU, real stereo warping — scripted by
-[`tools/record_demo.py`](tools/record_demo.py), so they can be regenerated
-after any UI change rather than going stale. Each job takes far longer than
+[`tools/record_demo.py`](tools/record_demo.py). They are uploaded to GitHub and
+embedded by URL, not committed, so they regenerate after any UI change without
+weighing the repository down. Each job takes far longer than
 anyone will watch, so the middle of every run is time-lapsed and captioned with
 how much real time was cut. The result panels are the actual output files, not
 a mock-up.
@@ -174,8 +164,7 @@ app/
     pipeline.py      the jobs (upscale, depth, SBS) + the run-all chain
   ui/                PySide6 tabs (Upscale, Depth, Converter, Run all)
 tools/
-  record_demo.py     scripts the real app and writes the README's GIFs
-docs/media/          those GIFs
+  record_demo.py     scripts the real app and records the README's clips
 ```
 
 ## Regenerating the README animations
@@ -186,7 +175,8 @@ uv run python tools/record_demo.py depth convert
 ```
 
 It drives the shipping window, runs the real pipeline, and writes
-`docs/media/demo-*.gif`. Recording uses a throwaway settings file, so it never
+`demo-*.mp4`, which are uploaded to GitHub and embedded in this README by URL
+rather than committed. Recording uses a throwaway settings file, so it never
 touches your own saved paths and options.
 
 The demo clip ships in the repo at `assets/demo/source.mp4`, committed rather

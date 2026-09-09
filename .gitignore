@@ -23,3 +23,8 @@ config.json
 *.local
 *.log
 *.lnk
+
+# Demo clips: recorded by tools/record_demo.py, hosted on GitHub and embedded in
+# the README by URL rather than committed.
+docs/media/demo-*.mp4
+docs/media/demo-*.gif
