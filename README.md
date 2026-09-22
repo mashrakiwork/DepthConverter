@@ -52,15 +52,6 @@ grows with how near that pixel is, and that difference is the whole of the 3D.
 
 https://github.com/user-attachments/assets/69b1a34c-70ce-450c-a864-cbc06ec351b1
 
-The clips above are recordings of the real app doing real work — real
-inference on the GPU, real stereo warping — scripted by
-[`tools/record_demo.py`](tools/record_demo.py). They are uploaded to GitHub and
-embedded by URL, not committed, so they regenerate after any UI change without
-weighing the repository down. Each job takes far longer than
-anyone will watch, so the middle of every run is time-lapsed and captioned with
-how much real time was cut. The result panels are the actual output files, not
-a mock-up.
-
 ## Quick start (new PC)
 
 **Windows**: double-click **`DepthConverter.bat`**. It hands the app to
