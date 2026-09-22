@@ -50,7 +50,7 @@ two are what each of your eyes sees. They look almost identical because they
 nearly are — each is the same frame shifted horizontally by an amount that
 grows with how near that pixel is, and that difference is the whole of the 3D.
 
-https://github.com/user-attachments/assets/a6da9150-5362-4331-82d3-b8d2b372afae
+https://github.com/user-attachments/assets/69b1a34c-70ce-450c-a864-cbc06ec351b1
 
 The clips above are recordings of the real app doing real work — real
 inference on the GPU, real stereo warping — scripted by

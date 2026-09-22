@@ -74,6 +74,13 @@ CLIP_URL = (
 )
 CLIP = ROOT / "assets" / "demo" / "source.mp4"
 
+#: Default working directory for a recording. Deliberately a short path off the
+#: drive root, NOT tempfile.mkdtemp(): that resolves under
+#: C:\\Users\\<name>\\AppData\\Local\\Temp\\..., and the tour types the work dir
+#: straight into the app's path fields, so a temp path would burn the operator's
+#: personal name into every filmed clip. This one is anonymous and tidy.
+DEMO_WORK = Path(Path.home().anchor or "C:\\") / "DepthDemo"
+
 #: The app renders at this logical size; the whole tab's form and the log panel
 #: are both in frame. Captured natively for MP4 (~1080 tall), scaled down for GIF.
 WINDOW_SIZE = (1376, 1080)
@@ -95,15 +102,30 @@ FPS = 8
 #: animation for half a minute.
 MAX_FRAMES = 80
 
-#: The result composite: width, how many source frames to skip between GIF
-#: frames, and the playback delay. Narrower and sparser than the UI acts even
-#: though it carries four panels, because photographs are far more expensive
-#: than a flat grey form: nothing repeats between frames, so frame differencing
-#: has nothing to remove and every frame costs close to a full picture. At 960
-#: wide and every 4th frame this act alone came to 13 MB.
+#: The result composite: width, how many source frames to skip between frames,
+#: and the playback delay. These defaults are for the GIF fallback, which is
+#: narrower and sparser than the UI acts even though it carries four panels,
+#: because photographs are far more expensive than a flat grey form: nothing
+#: repeats between frames, so frame differencing has nothing to remove and every
+#: frame costs close to a full picture. At 960 wide and every 4th frame this act
+#: alone came to 13 MB. The MP4 build overrides all three in main(): it composes
+#: from the real output pixels (not a screen capture), so it carries every frame
+#: at the clip's native rate and plays as smoothly as the footage itself.
 RESULT_WIDTH = 680
 RESULT_STRIDE = 9
 RESULT_DELAY = 170
+
+#: The demo clip's native frame rate (see CLIP_URL): how many DISTINCT frames of
+#: motion exist per second. Drives the MP4 result composite's per-frame hold so
+#: it plays back in real time - every source frame, one after another.
+RESULT_FPS = 25
+
+#: Container frame rate for the MP4 result. Higher than RESULT_FPS so playback is
+#: paced smoothly on 60/120 Hz displays, where 25 fps content otherwise lands on
+#: an uneven 2.4-refresh cadence that reads as micro-judder. The extra frames are
+#: duplicates of the 25 real ones (the source carries no more motion than that),
+#: so they compress to almost nothing and the file barely grows.
+RESULT_ENCODE_FPS = 60
 
 #: Palette depth for the result composite. The full 256 because one of its four
 #: panels is a smooth grey depth ramp: sharing a shallower palette with three
@@ -334,9 +356,12 @@ def frame_durations(stamps: list[float], forced: list[int | None]) -> list[int]:
     return durations
 
 
-def build_mp4(film: Film, out: Path, ffmpeg: str) -> None:
+def build_mp4(film: Film, out: Path, ffmpeg: str, fps: int = MP4_FPS) -> None:
     """Encode the frames as H.264, holding each for its real duration via the
-    concat demuxer, scaled to 1080 tall and resampled to a constant frame rate."""
+    concat demuxer, scaled to 1080 tall and resampled to a constant frame rate.
+
+    `fps` defaults to the UI acts' rate; the result composite passes its own
+    native rate so its full-frame-rate footage is encoded without a resample."""
     frames, stamps, forced = film.frames, film.stamps, film.forced
     if len(frames) < 2:
         print(f"  ! {out.name}: nothing captured", file=sys.stderr)
@@ -364,7 +389,7 @@ def build_mp4(film: Film, out: Path, ffmpeg: str) -> None:
             "-i",
             listing.name,
             "-vf",
-            f"scale=-2:{MP4_HEIGHT},fps={MP4_FPS},format=yuv420p",
+            f"scale=-2:{MP4_HEIGHT},fps={fps},format=yuv420p",
             "-c:v",
             "libx264",
             "-crf",
@@ -729,10 +754,14 @@ def main() -> None:
     )
     out = Path(out_dir) if out_dir else MEDIA
 
-    # Bigger result cells for a sharp 1920x1080 MP4 composite.
-    global RESULT_WIDTH
+    # The MP4 result composite is built from the real output pixels, so it can
+    # afford full 1920x1080 cells and, unlike the GIF, every frame at the clip's
+    # native rate - which is what keeps it smooth instead of a slideshow.
+    global RESULT_WIDTH, RESULT_STRIDE, RESULT_DELAY
     if "mp4" in formats:
         RESULT_WIDTH = 1920
+        RESULT_STRIDE = 1
+        RESULT_DELAY = round(1000 / RESULT_FPS)
 
     fetch_clip()
     # --work reuses an earlier --keep directory. `result` composes from files
@@ -741,13 +770,16 @@ def main() -> None:
     reuse = next(
         (a.split("=", 1)[1] for a in sys.argv if a.startswith("--work=")), None
     )
+    created = False
     if reuse:
         work = Path(reuse)
         if not work.is_dir():
             sys.exit(f"--work: no such directory: {work}")
         keep = True
     else:
-        work = Path(tempfile.mkdtemp(prefix="depthconverter-demo-"))
+        work = DEMO_WORK
+        created = not work.exists()
+        work.mkdir(parents=True, exist_ok=True)
     print(f"working in {work}")
     qapp, window = build_window(work)
 
@@ -762,7 +794,8 @@ def main() -> None:
             tour.caption(None)
             try:
                 if "mp4" in formats:
-                    build_mp4(film, out / f"demo-{name}.mp4", ffmpeg)
+                    fps = RESULT_ENCODE_FPS if name == "result" else MP4_FPS
+                    build_mp4(film, out / f"demo-{name}.mp4", ffmpeg, fps)
                 if "gif" in formats and name == "result":
                     # Deeper palette and its own size; the composite is pre-trimmed.
                     build_gif(
@@ -780,7 +813,8 @@ def main() -> None:
         window.close()
         if keep:
             print(f"working files kept in {work}")
-        else:
+        elif created:
+            # Only remove a directory this run created, never a pre-existing one.
             shutil.rmtree(work, ignore_errors=True)
 
 
