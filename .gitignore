@@ -28,3 +28,4 @@ config.json
 # the README by URL rather than committed.
 docs/media/demo-*.mp4
 docs/media/demo-*.gif
+assets/demo/source.mp4
